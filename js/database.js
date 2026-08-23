@@ -227,6 +227,36 @@ export function saveCompletedSaleTransaction(sale, updatedProducts) {
     });
 }
 
+export function saveVoidedSaleTransaction(sale, updatedProducts) {
+    return new Promise(function (resolve, reject) {
+        const transaction = state.database.transaction(
+            ["products", "sales"],
+            "readwrite"
+        );
+
+        const productStore = transaction.objectStore("products");
+        const salesStore = transaction.objectStore("sales");
+
+        updatedProducts.forEach(function (product) {
+            productStore.put(product);
+        });
+
+        salesStore.put(sale);
+
+        transaction.oncomplete = function () {
+            resolve(sale);
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error);
+        };
+
+        transaction.onabort = function () {
+            reject(transaction.error || new Error("Void transaction aborted."));
+        };
+    });
+}
+
 export function loadSalesFromDatabase() {
     return new Promise(function (resolve, reject) {
         const transaction = state.database.transaction("sales", "readonly");
