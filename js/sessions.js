@@ -182,8 +182,8 @@ async function cashOffSession() {
     const sessionSales =
         state.sales.filter(function (sale) {
             return (
-                sale.sessionId ===
-                state.currentSession.id
+                String(sale.sessionId) === String(state.currentSession.id) &&
+                !sale.voided
             );
         });
 
@@ -259,6 +259,29 @@ async function cashOffSession() {
             "The session could not be cashed off."
         );
     }
+}
+
+export function restoreCurrentOrderNumber() {
+    if (!state.currentSession) {
+        state.currentOrderNumber = 1;
+        dom.orderNumberDisplay.textContent = "1";
+        return;
+    }
+
+    const sessionOrderNumbers = state.sales
+        .filter(function (sale) {
+            return String(sale.sessionId) === String(state.currentSession.id);
+        })
+        .map(function (sale) {
+            return Number(sale.orderNumber) || 0;
+        });
+
+    const highestOrderNumber = sessionOrderNumbers.length > 0
+        ? Math.max(...sessionOrderNumbers)
+        : 0;
+
+    state.currentOrderNumber = highestOrderNumber + 1;
+    dom.orderNumberDisplay.textContent = String(state.currentOrderNumber);
 }
 
 export function initialiseSessions() {

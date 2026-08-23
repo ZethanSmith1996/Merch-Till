@@ -1,7 +1,9 @@
 import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { currencyFormatter } from "./config.js";
-import { escapeHTML } from "./utils.js";
+import { announceProductsChanged, escapeHTML } from "./utils.js";
+import { saveVoidedSaleTransaction } from "./database.js";
+import { canViewReports } from "./permissions.js";
 
 let reportMode = "all";
 let activeSessionId = "all";
@@ -69,6 +71,106 @@ function selectedSales() {
     return sales.filter(function (sale) {
         return String(sale.sessionId) === String(activeSessionId);
     });
+}
+
+function countedSales(sales) {
+    return sales.filter(function (sale) {
+        return !sale.voided;
+    });
+}
+
+function canVoidSale(sale) {
+    return Boolean(
+        canViewReports() &&
+        state.currentSession &&
+        !sale.voided &&
+        String(sale.sessionId) === String(state.currentSession.id)
+    );
+}
+
+async function voidSale(sale) {
+    if (!canVoidSale(sale)) {
+        window.alert(
+            "Only transactions from the currently open trading session can be voided."
+        );
+        return;
+    }
+
+    const shouldVoid = window.confirm(
+        `Void Order #${sale.orderNumber}?\n\n` +
+        "This will restore the sold items to stock and remove this transaction " +
+        "from the session totals. The transaction will remain visible as VOIDED."
+    );
+
+    if (!shouldVoid) {
+        return;
+    }
+
+    const returnedQuantities = new Map();
+
+    sale.items.forEach(function (item) {
+        returnedQuantities.set(
+            item.productId,
+            (returnedQuantities.get(item.productId) || 0) + item.quantity
+        );
+    });
+
+    const missingProduct = Array.from(returnedQuantities.keys()).find(
+        function (productId) {
+            return !state.products.some(function (product) {
+                return product.id === productId;
+            });
+        }
+    );
+
+    if (missingProduct !== undefined) {
+        window.alert(
+            "This transaction cannot be voided because one of its products is no longer available in the current product list."
+        );
+        return;
+    }
+
+    const updatedProducts = state.products.map(function (product) {
+        const quantityToRestore = returnedQuantities.get(product.id) || 0;
+
+        if (quantityToRestore === 0) {
+            return { ...product };
+        }
+
+        return {
+            ...product,
+            stock: product.stock + quantityToRestore
+        };
+    });
+
+    const voidedSale = {
+        ...sale,
+        voided: true,
+        voidedAt: new Date().toISOString(),
+        voidedBy: sessionStorage.getItem("merchTillUsername") || "Unknown"
+    };
+
+    try {
+        await saveVoidedSaleTransaction(voidedSale, updatedProducts);
+
+        state.products = updatedProducts;
+        state.sales = state.sales.map(function (storedSale) {
+            return storedSale.id === voidedSale.id ? voidedSale : storedSale;
+        });
+
+        announceProductsChanged();
+        document.dispatchEvent(new CustomEvent("sales-changed"));
+
+        window.alert(
+            `Order #${sale.orderNumber} has been voided.\n\n` +
+            "The stock has been restored and the transaction has been removed from the session totals."
+        );
+    } catch (error) {
+        console.error("The transaction could not be voided:", error);
+        window.alert(
+            "The transaction could not be voided. No stock or sales changes have been saved."
+        );
+    }
 }
 
 function updateActivePeriodHeading() {
@@ -141,11 +243,13 @@ function renderSessionButtons() {
             return String(sale.sessionId) === String(session.id);
         });
 
-        const revenue = sessionSales.reduce(function (sum, sale) {
+        const activeSessionSales = countedSales(sessionSales);
+
+        const revenue = activeSessionSales.reduce(function (sum, sale) {
             return sum + sale.total;
         }, 0);
 
-        const items = sessionSales.reduce(function (sum, sale) {
+        const items = activeSessionSales.reduce(function (sum, sale) {
             return sum + sale.itemCount;
         }, 0);
 
@@ -168,7 +272,7 @@ function renderSessionButtons() {
             </span>
             <strong>${currencyFormatter.format(revenue)}</strong>
             <span>${items} item${items === 1 ? "" : "s"}</span>
-            <span>${sessionSales.length} transaction${sessionSales.length === 1 ? "" : "s"}</span>
+            <span>${activeSessionSales.length} transaction${activeSessionSales.length === 1 ? "" : "s"}</span>
         `;
 
         button.addEventListener("click", function () {
@@ -283,6 +387,7 @@ function renderTransactions(sales) {
         const expanded = expandedTransactionId === key;
         const transaction = document.createElement("article");
         transaction.className = "report-transaction";
+        transaction.classList.toggle("voided-transaction", Boolean(sale.voided));
 
         const summary = document.createElement("button");
         summary.type = "button";
@@ -293,6 +398,7 @@ function renderTransactions(sales) {
             <span>${escapeHTML(sale.time)}</span>
             <span>${sale.itemCount} item${sale.itemCount === 1 ? "" : "s"}</span>
             <strong>${currencyFormatter.format(sale.total)}</strong>
+            ${sale.voided ? '<span class="transaction-status-badge">VOIDED</span>' : ""}
             <span class="transaction-chevron">${expanded ? "⌃" : "⌄"}</span>
         `;
 
@@ -303,6 +409,14 @@ function renderTransactions(sales) {
             <p class="transaction-user">
                 Completed by: <strong>${escapeHTML(sale.completedBy || "Unknown")}</strong>
             </p>
+
+            ${sale.voided
+                ? `<p class="transaction-void-notice">
+                    <strong>VOIDED</strong>
+                    ${sale.voidedBy ? ` by ${escapeHTML(sale.voidedBy)}` : ""}
+                    ${sale.voidedAt ? ` at ${escapeHTML(formatTime(sale.voidedAt))}` : ""}
+                   </p>`
+                : ""}
 
             <div class="transaction-detail-headings">
                 <span>Product</span>
@@ -330,6 +444,22 @@ function renderTransactions(sales) {
             </div>
         `;
 
+        if (canVoidSale(sale)) {
+            const actions = document.createElement("div");
+            actions.className = "transaction-actions";
+
+            const voidButton = document.createElement("button");
+            voidButton.type = "button";
+            voidButton.className = "void-transaction-button";
+            voidButton.textContent = "Void Transaction";
+            voidButton.addEventListener("click", function () {
+                voidSale(sale);
+            });
+
+            actions.appendChild(voidButton);
+            details.appendChild(actions);
+        }
+
         summary.addEventListener("click", function () {
             expandedTransactionId = expanded ? null : key;
             renderTransactions(sales);
@@ -346,20 +476,21 @@ export function renderReports() {
     renderSessionButtons();
 
     const sales = selectedSales();
+    const activeSales = countedSales(sales);
 
-    const revenue = sales.reduce(function (sum, sale) {
+    const revenue = activeSales.reduce(function (sum, sale) {
         return sum + sale.total;
     }, 0);
 
-    const itemsSold = sales.reduce(function (sum, sale) {
+    const itemsSold = activeSales.reduce(function (sum, sale) {
         return sum + sale.itemCount;
     }, 0);
 
     dom.reportRevenue.textContent = currencyFormatter.format(revenue);
     dom.reportItemsSold.textContent = String(itemsSold);
-    dom.reportTransactionsCount.textContent = String(sales.length);
+    dom.reportTransactionsCount.textContent = String(activeSales.length);
 
-    renderProductsSold(sales);
+    renderProductsSold(activeSales);
     renderTransactions(sales);
 }
 

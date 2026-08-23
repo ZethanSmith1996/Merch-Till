@@ -21,7 +21,8 @@ import {
 } from "./till.js";
 import {
     initialiseSessions,
-    renderSessionStatus
+    renderSessionStatus,
+    restoreCurrentOrderNumber
 } from "./sessions.js";
 import {
     initialiseReports,
@@ -61,6 +62,7 @@ async function startApplication() {
         await initialiseUsersDatabase();
         await loadSalesFromDatabase();
         await loadSessionsFromDatabase();
+        restoreCurrentOrderNumber();
 
         validateSavedSession();
         refreshProductDisplays();
