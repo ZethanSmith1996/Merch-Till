@@ -436,8 +436,22 @@ function renderTransactions(sales) {
                 })
                 .join("")}
 
+            ${Number(sale.discountAmount || 0) > 0
+                ? `<div class="transaction-total transaction-subtotal">
+                    <span>Subtotal</span>
+                    <strong>${currencyFormatter.format(sale.subtotal ?? (sale.total + Number(sale.discountAmount || 0)))}</strong>
+                   </div>
+                   <div class="transaction-total transaction-discount-total">
+                    <span>Discount (${Number(sale.discountPercent || 0)}%)</span>
+                    <strong>-${currencyFormatter.format(Number(sale.discountAmount || 0))}</strong>
+                   </div>
+                   ${sale.discountAuthorizedBy
+                        ? `<p class="transaction-discount-authoriser">Discount authorised by: <strong>${escapeHTML(sale.discountAuthorizedBy)}</strong></p>`
+                        : ""}`
+                : ""}
+
             <div class="transaction-total">
-                <span>Total</span>
+                <span>Money Taken</span>
                 <strong>${currencyFormatter.format(sale.total)}</strong>
             </div>
         `;
@@ -480,11 +494,16 @@ export function renderReports() {
         return sum + sale.total;
     }, 0);
 
+    const discounts = activeSales.reduce(function (sum, sale) {
+        return sum + Number(sale.discountAmount || 0);
+    }, 0);
+
     const itemsSold = activeSales.reduce(function (sum, sale) {
         return sum + sale.itemCount;
     }, 0);
 
     dom.reportRevenue.textContent = currencyFormatter.format(revenue);
+    dom.reportDiscounts.textContent = currencyFormatter.format(discounts);
     dom.reportItemsSold.textContent = String(itemsSold);
     dom.reportTransactionsCount.textContent = String(activeSales.length);
 

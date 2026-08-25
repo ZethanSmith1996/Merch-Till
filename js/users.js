@@ -29,6 +29,30 @@ function currentUsername() {
     return sessionStorage.getItem("merchTillUsername") || "";
 }
 
+function roleCanAuthoriseDiscounts(role) {
+    return role === "master-admin" || role === "admin";
+}
+
+function updateDiscountPinField() {
+    if (!dom.userDiscountPinGroup || !dom.userDiscountPinInput) return;
+
+    const editingId = Number(dom.editingUserIdInput.value);
+    const existingUser = state.users.find(function (user) {
+        return user.id === editingId;
+    });
+    const role = existingUser && existingUser.protected
+        ? existingUser.role
+        : dom.userRoleInput.value;
+    const eligible = roleCanAuthoriseDiscounts(role);
+
+    dom.userDiscountPinGroup.hidden = !eligible;
+    dom.userDiscountPinInput.disabled = !eligible;
+
+    if (!eligible) {
+        dom.userDiscountPinInput.value = "";
+    }
+}
+
 function getNextLocalIdFallback() {
     if (state.users.length === 0) return 1;
     return Math.max(...state.users.map(function (user) { return user.id || 0; })) + 1;
@@ -81,8 +105,10 @@ function openAddUserModal() {
     dom.userModalTitle.textContent = "Add User";
     dom.userPasswordInput.required = true;
     dom.userPasswordHelp.textContent = "A password is required for a new user.";
+    dom.userDiscountPinInput.value = "";
     dom.userActiveInput.checked = true;
     dom.userFormError.textContent = "";
+    updateDiscountPinField();
     dom.userModal.hidden = false;
     dom.userUsernameInput.focus();
 }
@@ -100,11 +126,15 @@ function openEditUserModal(userId) {
     dom.userUsernameInput.value = user.username;
     dom.userPasswordInput.value = "";
     dom.userPasswordInput.required = false;
+    dom.userDiscountPinInput.value = "";
     dom.userPasswordHelp.textContent = "Leave blank to keep the current password.";
     dom.userRoleInput.value = user.role;
     dom.userActiveInput.checked = Boolean(user.active);
     dom.userModalTitle.textContent = "Edit User";
     dom.userFormError.textContent = "";
+    dom.userDiscountPinHelp.textContent = user.discountPin
+        ? "A discount PIN is already set. Leave blank to keep it unchanged."
+        : "Set a 4–6 digit PIN to authorise discounts.";
 
     if (user.protected) {
         dom.userRoleInput.value = "master-admin";
@@ -117,6 +147,7 @@ function openEditUserModal(userId) {
         dom.userUsernameInput.disabled = false;
     }
 
+    updateDiscountPinField();
     dom.userModal.hidden = false;
     dom.userPasswordInput.focus();
 }
@@ -129,6 +160,9 @@ function closeUserModal() {
     dom.userRoleInput.disabled = false;
     dom.userActiveInput.disabled = false;
     dom.userUsernameInput.disabled = false;
+    dom.userDiscountPinInput.value = "";
+    dom.userDiscountPinGroup.hidden = false;
+    dom.userDiscountPinInput.disabled = false;
 }
 
 async function saveUser(event) {
@@ -140,6 +174,7 @@ async function saveUser(event) {
     const password = dom.userPasswordInput.value;
     const role = dom.userRoleInput.value;
     const active = dom.userActiveInput.checked;
+    const discountPin = dom.userDiscountPinInput.value.trim();
 
     if (!username) {
         dom.userFormError.textContent = "Please enter a username.";
@@ -148,6 +183,11 @@ async function saveUser(event) {
 
     if (!editingId && !password) {
         dom.userFormError.textContent = "Please enter a password.";
+        return;
+    }
+
+    if (discountPin && !/^\d{4,6}$/.test(discountPin)) {
+        dom.userFormError.textContent = "The discount PIN must contain 4–6 digits.";
         return;
     }
 
@@ -185,6 +225,16 @@ async function saveUser(event) {
                 updatedUser.password = password;
             }
 
+            const effectiveRole = user.protected ? user.role : role;
+
+            if (roleCanAuthoriseDiscounts(effectiveRole)) {
+                if (discountPin) {
+                    updatedUser.discountPin = discountPin;
+                }
+            } else {
+                delete updatedUser.discountPin;
+            }
+
             await saveUserToDatabase(updatedUser);
         } else {
             await addUserToDatabase({
@@ -192,6 +242,9 @@ async function saveUser(event) {
                 password,
                 role,
                 active,
+                ...(roleCanAuthoriseDiscounts(role) && discountPin
+                    ? { discountPin }
+                    : {}),
                 protected: false,
                 localIdFallback: getNextLocalIdFallback()
             });
@@ -242,6 +295,7 @@ export function initialiseUserManagement() {
     dom.closeUserModalButton.addEventListener("click", closeUserModal);
     dom.cancelUserButton.addEventListener("click", closeUserModal);
     dom.userForm.addEventListener("submit", saveUser);
+    dom.userRoleInput.addEventListener("change", updateDiscountPinField);
 
     dom.userModal.addEventListener("click", function (event) {
         if (event.target === dom.userModal) {

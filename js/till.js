@@ -351,14 +351,104 @@ function decreaseQuantity(productId) {
    Basket totals
 ================================================== */
 
-function calculateOrderTotal() {
-    let total = 0;
+function roundMoney(value) {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function calculateOrderTotals() {
+    let subtotal = 0;
 
     state.cart.forEach(function (item) {
-        total += item.price * item.quantity;
+        subtotal += item.price * item.quantity;
     });
 
-    return total;
+    subtotal = roundMoney(subtotal);
+
+    const discountPercent = Number(state.currentDiscountPercent) || 0;
+    const discountAmount = roundMoney(subtotal * (discountPercent / 100));
+    const total = roundMoney(Math.max(0, subtotal - discountAmount));
+
+    return {
+        subtotal,
+        discountPercent,
+        discountAmount,
+        total
+    };
+}
+
+function clearCurrentDiscount() {
+    state.currentDiscountPercent = 0;
+    state.currentDiscountAuthorizedBy = null;
+}
+
+function openDiscountModal() {
+    if (state.cart.size === 0) {
+        return;
+    }
+
+    dom.discountFormError.textContent = "";
+    dom.discountPercentInput.value = state.currentDiscountPercent > 0
+        ? String(state.currentDiscountPercent)
+        : "";
+    dom.discountPinInput.value = "";
+    dom.removeDiscountButton.hidden = state.currentDiscountPercent <= 0;
+    dom.discountModal.hidden = false;
+    dom.discountPercentInput.focus();
+}
+
+function closeDiscountModal() {
+    dom.discountModal.hidden = true;
+    dom.discountForm.reset();
+    dom.discountFormError.textContent = "";
+}
+
+function findDiscountAuthoriser(pin) {
+    return state.users.find(function (user) {
+        return (
+            user.active &&
+            (user.role === "admin" || user.role === "master-admin") &&
+            user.discountPin &&
+            user.discountPin === pin
+        );
+    }) || null;
+}
+
+function applyDiscount(event) {
+    event.preventDefault();
+
+    if (state.cart.size === 0) {
+        closeDiscountModal();
+        return;
+    }
+
+    const percentage = Number(dom.discountPercentInput.value);
+    const pin = dom.discountPinInput.value.trim();
+
+    if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) {
+        dom.discountFormError.textContent =
+            "Enter a discount percentage greater than 0 and no more than 100.";
+        return;
+    }
+
+    const authoriser = findDiscountAuthoriser(pin);
+
+    if (!authoriser) {
+        dom.discountFormError.textContent =
+            "The Admin PIN is incorrect or no active Admin PIN has been set.";
+        dom.discountPinInput.select();
+        return;
+    }
+
+    state.currentDiscountPercent = percentage;
+    state.currentDiscountAuthorizedBy = authoriser.username;
+    closeDiscountModal();
+    renderCart();
+}
+
+function removeDiscount() {
+    clearCurrentDiscount();
+    closeDiscountModal();
+    renderCart();
 }
 
 /* ==================================================
@@ -374,6 +464,7 @@ export function renderCart() {
     dom.emptyOrderMessage.hidden = hasItems;
     dom.orderItemsContainer.hidden = !hasItems;
     dom.clearOrderButton.disabled = !hasItems;
+    dom.orderOptionsButton.disabled = !hasItems;
     dom.completeSaleButton.disabled =
         !hasItems || (!state.currentSession && !trainingMode);
 
@@ -437,7 +528,21 @@ export function renderCart() {
         dom.orderItemsContainer.appendChild(orderItem);
     });
 
-    dom.orderTotal.textContent = currencyFormatter.format(calculateOrderTotal());
+    if (!hasItems && state.currentDiscountPercent > 0) {
+        clearCurrentDiscount();
+    }
+
+    const totals = calculateOrderTotals();
+    const hasDiscount = totals.discountPercent > 0;
+
+    dom.orderSubtotalRow.hidden = !hasDiscount;
+    dom.orderDiscountRow.hidden = !hasDiscount;
+    dom.orderSubtotal.textContent = currencyFormatter.format(totals.subtotal);
+    dom.orderDiscountLabel.textContent = hasDiscount
+        ? `Discount (${totals.discountPercent}%)`
+        : "Discount";
+    dom.orderDiscount.textContent = `-${currencyFormatter.format(totals.discountAmount)}`;
+    dom.orderTotal.textContent = currencyFormatter.format(totals.total);
 }
 
 /* ==================================================
@@ -446,6 +551,7 @@ export function renderCart() {
 
 export function clearCart() {
     state.cart.clear();
+    clearCurrentDiscount();
     renderCart();
 }
 
@@ -467,12 +573,16 @@ async function completeSale() {
         return;
     }
 
-    const saleTotal = calculateOrderTotal();
+    const totals = calculateOrderTotals();
+    const saleTotal = totals.total;
 
     if (trainingMode) {
         window.alert(
             "Training sale completed.\n\n" +
-            `Total: ${currencyFormatter.format(saleTotal)}\n\n` +
+            `Total: ${currencyFormatter.format(saleTotal)}\n` +
+            (totals.discountAmount > 0
+                ? `Discount: -${currencyFormatter.format(totals.discountAmount)}\n\n`
+                : "\n") +
             "No stock has been changed.\n" +
             "No transaction has been recorded."
         );
@@ -480,11 +590,15 @@ async function completeSale() {
         state.currentOrderNumber += 1;
         dom.orderNumberDisplay.textContent = state.currentOrderNumber;
         state.cart.clear();
+        clearCurrentDiscount();
         renderCart();
         return;
     }
 
-    const saleRecord = createSaleRecord(saleTotal);
+    const saleRecord = createSaleRecord({
+        ...totals,
+        discountAuthorizedBy: state.currentDiscountAuthorizedBy
+    });
 
     const updatedProducts = state.products.map(function (product) {
         const cartItem = state.cart.get(product.id);
@@ -517,12 +631,17 @@ async function completeSale() {
 
         window.alert(
             "Sale completed successfully.\n\n" +
+            (totals.discountAmount > 0
+                ? `Subtotal: ${currencyFormatter.format(totals.subtotal)}\n` +
+                  `Discount (${totals.discountPercent}%): -${currencyFormatter.format(totals.discountAmount)}\n`
+                : "") +
             `Total: ${currencyFormatter.format(saleTotal)}`
         );
 
         state.currentOrderNumber += 1;
         dom.orderNumberDisplay.textContent = state.currentOrderNumber;
         state.cart.clear();
+        clearCurrentDiscount();
         announceProductsChanged();
     } catch (error) {
         console.error("The sale could not be saved:", error);
@@ -554,6 +673,18 @@ export function initialiseTill() {
         }
     });
 
+    dom.orderOptionsButton.addEventListener("click", openDiscountModal);
+    dom.discountForm.addEventListener("submit", applyDiscount);
+    dom.removeDiscountButton.addEventListener("click", removeDiscount);
+    dom.closeDiscountModalButton.addEventListener("click", closeDiscountModal);
+    dom.cancelDiscountButton.addEventListener("click", closeDiscountModal);
+
+    dom.discountModal.addEventListener("click", function (event) {
+        if (event.target === dom.discountModal) {
+            closeDiscountModal();
+        }
+    });
+
     dom.completeSaleButton.addEventListener("click", completeSale);
 
     dom.closeVariantModalButton.addEventListener("click", closeVariantSelector);
@@ -566,7 +697,16 @@ export function initialiseTill() {
     });
 
     document.addEventListener("keydown", function (event) {
-        if (event.key === "Escape" && !dom.variantModal.hidden) {
+        if (event.key !== "Escape") {
+            return;
+        }
+
+        if (!dom.discountModal.hidden) {
+            closeDiscountModal();
+            return;
+        }
+
+        if (!dom.variantModal.hidden) {
             closeVariantSelector();
         }
     });

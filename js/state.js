@@ -6,5 +6,7 @@ export const state = {
     currentSession: null,
     cart: new Map(),
     database: null,
-    currentOrderNumber: 1
+    currentOrderNumber: 1,
+    currentDiscountPercent: 0,
+    currentDiscountAuthorizedBy: null
 };

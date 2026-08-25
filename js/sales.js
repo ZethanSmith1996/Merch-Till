@@ -8,7 +8,7 @@ function getLocalDateParts(date) {
     return `${year}-${month}-${day}`;
 }
 
-export function createSaleRecord(total) {
+export function createSaleRecord({ subtotal, discountPercent, discountAmount, total, discountAuthorizedBy }) {
     const now = new Date();
 
     const items = Array.from(state.cart.values()).map(function (item) {
@@ -42,6 +42,10 @@ export function createSaleRecord(total) {
         createdAt: now.toISOString(),
         completedBy:
             sessionStorage.getItem("merchTillUsername") || "Unknown",
+        subtotal: subtotal,
+        discountPercent: discountPercent,
+        discountAmount: discountAmount,
+        discountAuthorizedBy: discountAuthorizedBy || null,
         total: total,
         itemCount: itemCount,
         items: items
