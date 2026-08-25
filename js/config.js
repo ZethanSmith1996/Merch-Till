@@ -44,7 +44,7 @@ export const bootstrapUsers = [
 ];
 export const discountAuthorisers = [
     { username: "master", pin: "1111" },
-    { username: "admin", pin: 1234" },
+    { username: "admin", pin: "1234" },
     { username: "summer", pin: "290304" },
     { username: "lynda", pin: "2509" }
 ];
