@@ -420,36 +420,66 @@ export async function initialiseUsersDatabase() {
         return state.users;
     }
 
-    const existingUsernames = new Set(
-        state.users.map(function (user) {
-            return user.username.toLowerCase();
-        })
-    );
+    const transaction = state.database.transaction("users", "readwrite");
+    const store = transaction.objectStore("users");
+    let changed = false;
 
-    const missingBootstrapUsers = bootstrapUsers.filter(function (user) {
-        return !existingUsernames.has(user.username.toLowerCase());
+    bootstrapUsers.forEach(function (bootstrapUser) {
+        const existingUser = state.users.find(function (user) {
+            return (
+                user.username.toLowerCase() ===
+                bootstrapUser.username.toLowerCase()
+            );
+        });
+
+        if (existingUser) {
+            const synchronisedUser = {
+                ...existingUser,
+                username: bootstrapUser.username,
+                password: bootstrapUser.password,
+                role: bootstrapUser.role,
+                active: bootstrapUser.active,
+                protected: bootstrapUser.protected
+            };
+
+            const needsUpdate =
+                existingUser.username !== synchronisedUser.username ||
+                existingUser.password !== synchronisedUser.password ||
+                existingUser.role !== synchronisedUser.role ||
+                existingUser.active !== synchronisedUser.active ||
+                existingUser.protected !== synchronisedUser.protected;
+
+            if (needsUpdate) {
+                store.put(synchronisedUser);
+                changed = true;
+            }
+
+            return;
+        }
+
+        store.add({ ...bootstrapUser });
+        changed = true;
     });
 
-    if (missingBootstrapUsers.length > 0) {
-        const transaction = state.database.transaction("users", "readwrite");
-        const store = transaction.objectStore("users");
-
-        missingBootstrapUsers.forEach(function (user) {
-            store.add({ ...user });
-        });
-
-        await new Promise(function (resolve, reject) {
-            transaction.oncomplete = resolve;
-            transaction.onerror = function () {
-                reject(transaction.error);
-            };
-            transaction.onabort = function () {
-                reject(transaction.error || new Error("User synchronisation aborted."));
-            };
-        });
-
-        await loadUsersFromDatabase();
+    if (!changed) {
+        transaction.abort();
+        return state.users;
     }
 
+    await new Promise(function (resolve, reject) {
+        transaction.oncomplete = resolve;
+        transaction.onerror = function () {
+            reject(transaction.error);
+        };
+        transaction.onabort = function () {
+            if (transaction.error) {
+                reject(transaction.error);
+                return;
+            }
+            resolve();
+        };
+    });
+
+    await loadUsersFromDatabase();
     return state.users;
 }
