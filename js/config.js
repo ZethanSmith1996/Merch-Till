@@ -14,6 +14,20 @@ export const bootstrapUsers = [
         protected: false
     },
     {
+        username: "lynda",
+        password: "Lynda123!",
+        role: "admin",
+        active: "true",
+        protected: "false"
+    },
+    {
+        username: "summer",
+        password: "Summer123!",
+        role: "admin",
+        active: true,
+        protected: false
+    },
+    {
         username: "staff",
         password: "Staff123!",
         role: "staff",
@@ -30,7 +44,9 @@ export const bootstrapUsers = [
 ];
 export const discountAuthorisers = [
     { username: "master", pin: "1111" },
-    { username: "admin", pin: "2222" }
+    { username: "admin", pin: 1234" },
+    { username: "summer", pin: "290304" },
+    { username: "lynda", pin: "2509" }
 ];
 
 
