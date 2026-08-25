@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Merch Till</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- ==================================================
+         Login screen
+    ================================================== -->
+    <main id="login-screen" class="login-page">
+
+        <section class="login-container">
+
+            <h1>Merch Till</h1>
+
+            <form id="login-form">
+
+                <label for="username">
+                    Username
+                </label>
+
+                <input
+                    type="text"
+                    id="username"
+                    name="username"
+                    autocomplete="username"
+                    required
+                >
+
+                <label for="password">
+                    Password
+                </label>
+
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    autocomplete="current-password"
+                    required
+                >
+
+                <p
+                    id="login-error"
+                    class="login-error"
+                    aria-live="polite"
+                ></p>
+
+                <button type="submit">
+                    Login
+                </button>
+
+            </form>
+
+        </section>
+
+    </main>
+
+
+    <!-- ==================================================
+         Main application
+    ================================================== -->
+    <main id="app-screen" class="app-screen" hidden>
+
+<header class="app-header">
+
+    <div class="app-brand">
+
+        <h1>Merch Till</h1>
+
+        <div
+            id="trading-status-pill"
+            class="trading-status-pill trading-closed"
+            role="status"
+            aria-live="polite"
+        >
+            <span class="trading-status-dot"></span>
+
+            <span id="trading-status-label">
+                Trading Closed
+            </span>
+        </div>
+
+    </div>
+
+    <div class="account-area">
+
+                <span id="logged-in-user">
+                    Admin
+                </span>
+
+                <button
+                    type="button"
+                    id="logout-button"
+                    class="logout-button"
+                >
+                    Log out
+                </button>
+
+            </div>
+
+        </header>
+
+
+        <div class="app-layout">
+
+            <!-- Sidebar navigation -->
+            <nav class="sidebar">
+
+                <button
+                    type="button"
+                    class="nav-button active"
+                    data-screen="till-section"
+                >
+                    Till
+                </button>
+
+                <button
+                    type="button"
+                    class="nav-button"
+                    data-screen="products-section"
+                >
+                    Products
+                </button>
+
+                <button
+                    type="button"
+                    class="nav-button"
+                    data-screen="reports-section"
+                >
+                    Reports
+                </button>
+
+                <button
+                    type="button"
+                    class="nav-button"
+                    data-screen="users-section"
+                >
+                    Users
+                </button>
+
+            </nav>
+
+
+            <section class="content-area">
+
+                <!-- ==================================================
+                     Till section
+                ================================================== -->
+                <section
+                    id="till-section"
+                    class="app-section"
+                >
+
+                    <div class="section-heading">
+
+                        <div>
+                            <h2>Till</h2>
+
+                            <p>
+                                Select a product to add it to the current order.
+                            </p>
+                        </div>
+
+                        <div class="order-number">
+                            Order <span id="order-number">1</span>
+                        </div>
+
+                    </div>
+
+
+                    <div
+                        id="training-mode-banner"
+                        class="training-mode-banner"
+                        hidden
+                    >
+                        <strong>
+                            Training Mode
+                        </strong>
+
+                        <span>
+                            Practice sales are not recorded and stock will not
+                            be changed.
+                        </span>
+                    </div>
+
+
+                    <div id="session-control-bar" class="session-control-bar">
+
+                        <p id="session-status-text">
+                            Trading closed — start a session to begin selling.
+                        </p>
+
+                        <div class="session-control-actions">
+
+                            <button
+                                type="button"
+                                id="start-session-button"
+                                class="start-session-button"
+                            >
+                                Start New Session
+                            </button>
+
+                            <button
+                                type="button"
+                                id="cash-off-session-button"
+                                class="cash-off-session-button"
+                                hidden
+                            >
+                                Cash Off Session
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="till-layout">
+
+                        <!-- Product buttons -->
+                        <section class="product-panel">
+
+                            <h3>Products</h3>
+
+                            <div
+                                id="product-grid"
+                                class="product-grid"
+                            >
+                                <!-- Product buttons are added by JavaScript -->
+                            </div>
+
+                        </section>
+
+
+                        <!-- Current order -->
+                        <section class="order-panel">
+
+                            <h3>Current Order</h3>
+
+                            <div
+                                id="empty-order"
+                                class="empty-order"
+                            >
+                                No products have been added.
+                            </div>
+
+                            <div
+                                id="order-items"
+                                class="order-items"
+                            >
+                                <!-- Basket items are added by JavaScript -->
+                            </div>
+
+                            <div class="order-summary">
+
+                                <div
+                                    id="order-subtotal-row"
+                                    class="order-breakdown-row"
+                                    hidden
+                                >
+                                    <span>Subtotal</span>
+                                    <strong id="order-subtotal">£0.00</strong>
+                                </div>
+
+                                <div
+                                    id="order-discount-row"
+                                    class="order-breakdown-row discount-row"
+                                    hidden
+                                >
+                                    <span id="order-discount-label">Discount</span>
+                                    <strong id="order-discount">-£0.00</strong>
+                                </div>
+
+                                <div class="total-row">
+
+                                    <span>
+                                        Total
+                                    </span>
+
+                                    <strong id="order-total">
+                                        £0.00
+                                    </strong>
+
+                                </div>
+
+                                <div class="order-actions">
+
+                                    <button
+                                        type="button"
+                                        id="clear-order-button"
+                                        class="secondary-button"
+                                        disabled
+                                    >
+                                        Clear Order
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        id="order-options-button"
+                                        class="order-options-button"
+                                        aria-label="Order options"
+                                        disabled
+                                    >
+                                        ⋯
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        id="complete-sale-button"
+                                        class="complete-sale-button"
+                                        disabled
+                                    >
+                                        Complete Sale
+                                    </button>
+
+                                </div>
+
+                            </div>
+
+                        </section>
+
+                    </div>
+
+                </section>
+
+
+                <!-- ==================================================
+                     Products section
+                ================================================== -->
+                <section
+                    id="products-section"
+                    class="app-section"
+                    hidden
+                >
+
+                    <div class="section-heading">
+
+                        <div>
+                            <h2>Products</h2>
+
+                            <p>
+                                Add, edit and manage your stock.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            id="add-product-button"
+                            class="add-product-button"
+                        >
+                            + Add Product
+                        </button>
+
+                    </div>
+
+
+                    <div class="products-table-container">
+
+                        <table class="products-table">
+
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Price</th>
+                                    <th>Stock</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="products-table-body">
+                                <!-- Products are added by JavaScript -->
+                            </tbody>
+
+                        </table>
+
+                        <div
+                            id="no-products-message"
+                            class="no-products-message"
+                            hidden
+                        >
+                            No products have been added.
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- ==================================================
+                     Reports section
+                ================================================== -->
+                <section
+                    id="reports-section"
+                    class="app-section"
+                    hidden
+                >
+
+                    <div class="section-heading reports-heading">
+
+                        <div>
+                            <h2>Reports</h2>
+
+                            <p>
+                                View overall sales or compare individual
+                                trading sessions.
+                            </p>
+                        </div>
+
+                    </div>
+
+
+                    <!-- Active report period and filters -->
+                    <section class="report-active-period">
+
+                        <span class="report-active-period-label">
+                            Active Period
+                        </span>
+
+                        <h3 id="report-active-period">
+                            5 August 2026
+                        </h3>
+
+                        <p id="report-active-view">
+                            All Sessions
+                        </p>
+
+                    </section>
+
+
+                    <!-- All report controls in one row -->
+                    <div class="report-filter-toolbar">
+
+                        <div class="report-filters">
+
+                            <button
+                                type="button"
+                                id="today-report-button"
+                            >
+                                Today
+                            </button>
+
+                            <label for="report-start-date">
+                                From
+
+                                <input
+                                    type="date"
+                                    id="report-start-date"
+                                >
+                            </label>
+
+                            <label for="report-end-date">
+                                To
+
+                                <input
+                                    type="date"
+                                    id="report-end-date"
+                                >
+                            </label>
+
+                            <button
+                                type="button"
+                                id="apply-report-range-button"
+                            >
+                                Apply
+                            </button>
+
+                        </div>
+
+
+                        <div
+                            class="report-view-buttons"
+                            aria-label="Report view"
+                        >
+
+                            <button
+                                type="button"
+                                id="all-sessions-report-button"
+                                class="report-view-button active"
+                            >
+                                All Sessions
+                            </button>
+
+                            <button
+                                type="button"
+                                id="by-session-report-button"
+                                class="report-view-button"
+                            >
+                                By Session
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- Session buttons appear in By Session view -->
+                    <div
+                        id="report-session-buttons"
+                        class="report-session-buttons"
+                        hidden
+                    ></div>
+
+
+                    <!-- Summary cards -->
+                    <div class="report-summary-grid">
+
+                        <article class="report-summary-card">
+
+                            <span class="report-summary-title">
+                                Money Taken
+                            </span>
+
+                            <strong
+                                id="report-revenue"
+                                class="report-summary-value"
+                            >
+                                £0.00
+                            </strong>
+
+                            <span class="report-discount-summary">
+                                Discounts: <strong id="report-discounts">£0.00</strong>
+                            </span>
+
+                        </article>
+
+
+                        <article class="report-summary-card">
+
+                            <span class="report-summary-title">
+                                Items Sold
+                            </span>
+
+                            <strong
+                                id="report-items-sold"
+                                class="report-summary-value"
+                            >
+                                0
+                            </strong>
+
+                        </article>
+
+
+                        <article class="report-summary-card">
+
+                            <span class="report-summary-title">
+                                Transactions
+                            </span>
+
+                            <strong
+                                id="report-transactions-count"
+                                class="report-summary-value"
+                            >
+                                0
+                            </strong>
+
+                        </article>
+
+                    </div>
+
+
+                    <!-- Products and transactions -->
+                    <div class="report-content-grid">
+
+                        <section class="report-block report-products-block">
+
+                            <h3>
+                                Products Sold (By Quantity)
+                            </h3>
+
+                            <div id="report-products-sold"></div>
+
+                        </section>
+
+
+                        <section class="report-block report-transactions-block">
+
+                            <div class="report-block-heading">
+
+                                <h3>
+                                    Transactions
+                                </h3>
+
+                                <button
+                                    type="button"
+                                    id="toggle-transactions-button"
+                                    class="show-transactions-button"
+                                >
+                                    Show All Transactions
+                                </button>
+
+                            </div>
+
+                            <div
+                                id="report-transactions"
+                                class="report-transactions"
+                                hidden
+                            ></div>
+
+                        </section>
+
+                    </div>
+
+                </section>
+
+
+                <!-- ==================================================
+                     Users section
+                ================================================== -->
+                <section
+                    id="users-section"
+                    class="app-section"
+                    hidden
+                >
+
+                    <div class="section-heading">
+
+                        <div>
+                            <h2>Users</h2>
+
+                            <p>
+                                Create and manage access to Merch Till.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            id="add-user-button"
+                            class="add-product-button"
+                        >
+                            + Add User
+                        </button>
+
+                    </div>
+
+
+                    <div class="products-table-container">
+
+                        <table class="products-table">
+
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="users-table-body">
+                                <!-- Users are added by JavaScript -->
+                            </tbody>
+
+                        </table>
+
+                        <div
+                            id="no-users-message"
+                            class="no-products-message"
+                            hidden
+                        >
+                            No users have been created.
+                        </div>
+
+                    </div>
+
+                </section>
+
+            </section>
+
+        </div>
+
+    </main>
+
+
+    <!-- ==================================================
+         Product form popup
+    ================================================== -->
+    <div
+        id="product-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="product-modal-title"
+        >
+
+            <div class="modal-header">
+
+                <h2 id="product-modal-title">
+                    Add Product
+                </h2>
+
+                <button
+                    type="button"
+                    id="close-product-modal"
+                    class="modal-close-button"
+                    aria-label="Close product form"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <form id="product-form">
+
+                <input
+                    type="hidden"
+                    id="editing-product-id"
+                >
+
+                <input
+                    type="hidden"
+                    id="editing-product-group-id"
+                >
+
+                <div class="form-group">
+
+                    <label for="product-name">
+                        Product Name
+                    </label>
+
+                    <input
+                        type="text"
+                        id="product-name"
+                        maxlength="60"
+                        required
+                    >
+
+                </div>
+
+                <div class="form-group">
+
+                    <label for="product-price">
+                        Price (£)
+                    </label>
+
+                    <input
+                        type="number"
+                        id="product-price"
+                        min="0"
+                        step="0.01"
+                        required
+                    >
+
+                </div>
+
+                <label
+                    class="checkbox-row product-variants-toggle"
+                    for="product-has-variants"
+                >
+                    <input
+                        type="checkbox"
+                        id="product-has-variants"
+                    >
+
+                    <span>
+                        Product has variants
+                    </span>
+                </label>
+
+                <p class="field-help variant-help-text">
+                    Use variants for options such as clothing sizes or different designs.
+                </p>
+
+                <div
+                    id="single-stock-group"
+                    class="form-group"
+                >
+
+                    <label for="product-stock">
+                        Current Stock Quantity
+                    </label>
+
+                    <input
+                        type="number"
+                        id="product-stock"
+                        min="0"
+                        step="1"
+                        required
+                    >
+
+                </div>
+
+                <section
+                    id="product-variants-section"
+                    class="product-variants-section"
+                    hidden
+                >
+                    <div class="variants-section-heading">
+                        <div>
+                            <h3>Variants</h3>
+                            <p>Each variant keeps its own stock count.</p>
+                        </div>
+
+                        <button
+                            type="button"
+                            id="add-variant-button"
+                            class="add-variant-button"
+                        >
+                            + Add Variant
+                        </button>
+                    </div>
+
+                    <div id="variant-rows"></div>
+                </section>
+
+                <p
+                    id="product-form-error"
+                    class="form-error"
+                ></p>
+
+                <div class="modal-actions">
+
+                    <button
+                        type="button"
+                        id="cancel-product-button"
+                        class="secondary-button"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="save-product-button"
+                    >
+                        Save Product
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
+         Variant selection popup
+    ================================================== -->
+    <div
+        id="variant-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box variant-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="variant-modal-title"
+        >
+
+            <div class="modal-header">
+
+                <div>
+                    <h2 id="variant-modal-title">
+                        Choose Variant
+                    </h2>
+
+                    <p
+                        id="variant-modal-price"
+                        class="variant-modal-price"
+                    ></p>
+                </div>
+
+                <button
+                    type="button"
+                    id="close-variant-modal"
+                    class="modal-close-button"
+                    aria-label="Close variant selection"
+                >
+                    ×
+                </button>
+
+            </div>
+
+            <div
+                id="variant-options"
+                class="variant-options"
+            ></div>
+
+            <button
+                type="button"
+                id="cancel-variant-button"
+                class="secondary-button variant-cancel-button"
+            >
+                Cancel
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
+         Discount authorisation popup
+    ================================================== -->
+    <div
+        id="discount-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box discount-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="discount-modal-title"
+        >
+
+            <div class="modal-header">
+                <h2 id="discount-modal-title">Order Options</h2>
+
+                <button
+                    type="button"
+                    id="close-discount-modal"
+                    class="modal-close-button"
+                    aria-label="Close order options"
+                >
+                    ×
+                </button>
+            </div>
+
+            <form id="discount-form">
+
+                <div class="form-group">
+                    <label for="discount-percent">Discount percentage</label>
+                    <input
+                        type="number"
+                        id="discount-percent"
+                        min="0.01"
+                        max="100"
+                        step="0.01"
+                        inputmode="decimal"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="discount-pin">Admin PIN</label>
+                    <input
+                        type="password"
+                        id="discount-pin"
+                        inputmode="numeric"
+                        pattern="[0-9]*"
+                        maxlength="6"
+                        autocomplete="off"
+                        required
+                    >
+                    <p class="field-help">An Admin or Master Admin discount PIN is required.</p>
+                </div>
+
+                <p
+                    id="discount-form-error"
+                    class="form-error"
+                    aria-live="polite"
+                ></p>
+
+                <div class="modal-actions discount-modal-actions">
+                    <button
+                        type="button"
+                        id="remove-discount-button"
+                        class="secondary-button"
+                        hidden
+                    >
+                        Remove Discount
+                    </button>
+
+                    <button
+                        type="button"
+                        id="cancel-discount-button"
+                        class="secondary-button"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="save-product-button"
+                    >
+                        Apply Discount
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ==================================================
+         User form popup
+    ================================================== -->
+    <div
+        id="user-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="user-modal-title"
+        >
+
+            <div class="modal-header">
+
+                <h2 id="user-modal-title">
+                    Add User
+                </h2>
+
+                <button
+                    type="button"
+                    id="close-user-modal"
+                    class="modal-close-button"
+                    aria-label="Close user form"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <form id="user-form">
+
+                <input
+                    type="hidden"
+                    id="editing-user-id"
+                >
+
+                <div class="form-group">
+
+                    <label for="user-username">
+                        Username
+                    </label>
+
+                    <input
+                        type="text"
+                        id="user-username"
+                        maxlength="40"
+                        required
+                    >
+
+                </div>
+
+                <div class="form-group">
+
+                    <label for="user-password">
+                        Password
+                    </label>
+
+                    <input
+                        type="password"
+                        id="user-password"
+                        maxlength="100"
+                    >
+
+                    <p
+                        id="user-password-help"
+                        class="field-help"
+                    ></p>
+
+                </div>
+
+                <div
+                    id="user-discount-pin-group"
+                    class="form-group"
+                >
+
+                    <label for="user-discount-pin">
+                        Discount Authorisation PIN
+                    </label>
+
+                    <input
+                        type="password"
+                        id="user-discount-pin"
+                        inputmode="numeric"
+                        pattern="[0-9]*"
+                        maxlength="6"
+                        autocomplete="off"
+                    >
+
+                    <p
+                        id="user-discount-pin-help"
+                        class="field-help"
+                    >
+                        Optional 4–6 digit PIN for Admin or Master Admin discount approval.
+                    </p>
+
+                </div>
+
+                <div class="form-group">
+
+                    <label for="user-role">
+                        Role
+                    </label>
+
+                    <select
+                        id="user-role"
+                        required
+                    >
+                        <option value="staff">
+                            Staff
+                        </option>
+
+                        <option value="admin">
+                            Admin
+                        </option>
+
+                        <option value="training">
+                            Training
+                        </option>
+                    </select>
+
+                </div>
+
+                <label
+                    class="checkbox-row"
+                    for="user-active"
+                >
+                    <input
+                        type="checkbox"
+                        id="user-active"
+                        checked
+                    >
+
+                    <span>
+                        Account active
+                    </span>
+                </label>
+
+                <p
+                    id="user-form-error"
+                    class="form-error"
+                ></p>
+
+                <div class="modal-actions">
+
+                    <button
+                        type="button"
+                        id="cancel-user-button"
+                        class="secondary-button"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="save-product-button"
+                    >
+                        Save User
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+    <script type="module" src="js/app.js"></script>
+
+</body>
+</html>
