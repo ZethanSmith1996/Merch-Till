@@ -1,4 +1,4 @@
-import { currencyFormatter } from "./config.js";
+import { currencyFormatter, discountAuthorisers } from "./config.js";
 import { dom } from "./dom.js";
 
 import {
@@ -403,14 +403,23 @@ function closeDiscountModal() {
 }
 
 function findDiscountAuthoriser(pin) {
-    return state.users.find(function (user) {
+    const configuredAuthoriser = discountAuthorisers.find(function (authoriser) {
+        return authoriser.pin === pin;
+    });
+
+    if (!configuredAuthoriser) {
+        return null;
+    }
+
+    const user = state.users.find(function (item) {
         return (
-            user.active &&
-            (user.role === "admin" || user.role === "master-admin") &&
-            user.discountPin &&
-            user.discountPin === pin
+            item.username.toLowerCase() === configuredAuthoriser.username.toLowerCase() &&
+            item.active &&
+            (item.role === "admin" || item.role === "master-admin")
         );
-    }) || null;
+    });
+
+    return user || null;
 }
 
 function applyDiscount(event) {
@@ -434,7 +443,7 @@ function applyDiscount(event) {
 
     if (!authoriser) {
         dom.discountFormError.textContent =
-            "The Admin PIN is incorrect or no active Admin PIN has been set.";
+            "The Admin PIN is incorrect.";
         dom.discountPinInput.select();
         return;
     }

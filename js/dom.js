@@ -24,9 +24,6 @@ export const dom = {
     userFormError: document.getElementById("user-form-error"),
     closeUserModalButton: document.getElementById("close-user-modal"),
     cancelUserButton: document.getElementById("cancel-user-button"),
-    userDiscountPinGroup: document.getElementById("user-discount-pin-group"),
-    userDiscountPinInput: document.getElementById("user-discount-pin"),
-    userDiscountPinHelp: document.getElementById("user-discount-pin-help"),
 
     navigationButtons: document.querySelectorAll(".nav-button"),
     appSections: document.querySelectorAll(".app-section"),

@@ -28,6 +28,11 @@ export const bootstrapUsers = [
         protected: false
     }
 ];
+export const discountAuthorisers = [
+    { username: "master", pin: "1111" },
+    { username: "admin", pin: "2222" }
+];
+
 
 export const defaultProducts = [
     { id: 1, name: "T-Shirt", price: 10.00, stock: 5 },
