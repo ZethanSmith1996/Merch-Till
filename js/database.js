@@ -417,6 +417,38 @@ export async function initialiseUsersDatabase() {
     if (state.users.length === 0) {
         await addBootstrapUsersToDatabase();
         await loadUsersFromDatabase();
+        return state.users;
+    }
+
+    const existingUsernames = new Set(
+        state.users.map(function (user) {
+            return user.username.toLowerCase();
+        })
+    );
+
+    const missingBootstrapUsers = bootstrapUsers.filter(function (user) {
+        return !existingUsernames.has(user.username.toLowerCase());
+    });
+
+    if (missingBootstrapUsers.length > 0) {
+        const transaction = state.database.transaction("users", "readwrite");
+        const store = transaction.objectStore("users");
+
+        missingBootstrapUsers.forEach(function (user) {
+            store.add({ ...user });
+        });
+
+        await new Promise(function (resolve, reject) {
+            transaction.oncomplete = resolve;
+            transaction.onerror = function () {
+                reject(transaction.error);
+            };
+            transaction.onabort = function () {
+                reject(transaction.error || new Error("User synchronisation aborted."));
+            };
+        });
+
+        await loadUsersFromDatabase();
     }
 
     return state.users;

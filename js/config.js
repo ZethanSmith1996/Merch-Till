@@ -17,8 +17,8 @@ export const bootstrapUsers = [
         username: "lynda",
         password: "Lynda123!",
         role: "admin",
-        active: "true",
-        protected: "false"
+        active: true,
+        protected: false
     },
     {
         username: "summer",

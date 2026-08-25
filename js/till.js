@@ -403,23 +403,9 @@ function closeDiscountModal() {
 }
 
 function findDiscountAuthoriser(pin) {
-    const configuredAuthoriser = discountAuthorisers.find(function (authoriser) {
+    return discountAuthorisers.find(function (authoriser) {
         return authoriser.pin === pin;
-    });
-
-    if (!configuredAuthoriser) {
-        return null;
-    }
-
-    const user = state.users.find(function (item) {
-        return (
-            item.username.toLowerCase() === configuredAuthoriser.username.toLowerCase() &&
-            item.active &&
-            (item.role === "admin" || item.role === "master-admin")
-        );
-    });
-
-    return user || null;
+    }) || null;
 }
 
 function applyDiscount(event) {
