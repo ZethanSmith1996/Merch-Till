@@ -711,7 +711,36 @@ select:focus {
 .product-actions {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
+}
+
+.product-order-actions {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.move-product-button {
+    width: 36px;
+    min-width: 36px;
+    height: 34px;
+    padding: 0;
+    border-radius: 7px;
+    color: var(--navy-700);
+    background: var(--grey-100);
+    border: 1px solid var(--grey-300);
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.move-product-button:hover:not(:disabled) {
+    background: var(--grey-300);
+}
+
+.move-product-button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
 }
 
 .edit-product-button,
