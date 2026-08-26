@@ -20,6 +20,27 @@ function isVariantProduct(product) {
     return Boolean(product.groupId && product.variantName);
 }
 
+function getProductTileColor(product) {
+    const allowedColours = new Set([
+        "pink",
+        "blue",
+        "green",
+        "yellow"
+    ]);
+
+    return allowedColours.has(product.tileColor)
+        ? product.tileColor
+        : "default";
+}
+
+function applyProductTileColor(button, product) {
+    const tileColor = getProductTileColor(product);
+
+    if (tileColor !== "default") {
+        button.classList.add(`product-color-${tileColor}`);
+    }
+}
+
 function productsInGroup(groupId) {
     return state.products
         .filter(function (product) {
@@ -81,6 +102,7 @@ function renderSingleProductButton(product, trainingMode, tradingClosed) {
     const productButton = document.createElement("button");
     productButton.type = "button";
     productButton.className = "product-button";
+    applyProductTileColor(productButton, product);
 
     const isSoldOut = product.stock <= 0;
 
@@ -141,6 +163,7 @@ function renderVariantGroupButton(groupProducts, trainingMode, tradingClosed) {
     const productButton = document.createElement("button");
     productButton.type = "button";
     productButton.className = "product-button variant-product-button";
+    applyProductTileColor(productButton, firstProduct);
 
     if ((!trainingMode && isSoldOut) || tradingClosed) {
         productButton.disabled = true;

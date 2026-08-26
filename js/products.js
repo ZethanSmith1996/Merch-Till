@@ -40,6 +40,20 @@ function getProductSortOrder(product) {
         : product.id;
 }
 
+function getProductTileColor(product) {
+    const allowedColours = new Set([
+        "default",
+        "pink",
+        "blue",
+        "green",
+        "yellow"
+    ]);
+
+    return allowedColours.has(product.tileColor)
+        ? product.tileColor
+        : "default";
+}
+
 function compareProductsForDisplay(first, second) {
     const orderDifference =
         getProductSortOrder(first) - getProductSortOrder(second);
@@ -409,6 +423,7 @@ function openAddProductModal() {
     dom.editingProductGroupIdInput.value = "";
     dom.productModalTitle.textContent = "Add Product";
     dom.productFormError.textContent = "";
+    dom.productTileColorInput.value = "default";
     clearVariantRows();
     setVariantMode(false);
     dom.productModal.hidden = false;
@@ -430,6 +445,7 @@ function openEditProductModal(productId) {
     dom.editingProductIdInput.value = String(product.id);
     dom.productNameInput.value = product.name;
     dom.productPriceInput.value = product.price.toFixed(2);
+    dom.productTileColorInput.value = getProductTileColor(product);
     dom.productModalTitle.textContent = "Edit Product";
 
     if (isVariantProduct(product)) {
@@ -540,6 +556,7 @@ async function saveProduct(event) {
 
     const name = dom.productNameInput.value.trim();
     const price = Number(dom.productPriceInput.value);
+    const tileColor = dom.productTileColorInput.value || "default";
     const editingProductId = Number(dom.editingProductIdInput.value) || null;
     const editingProductGroupId = dom.editingProductGroupIdInput.value || "";
     const hasVariants = dom.productHasVariantsInput.checked;
@@ -591,7 +608,8 @@ async function saveProduct(event) {
                     groupId: undefined,
                     variantName: undefined,
                     variantOrder: undefined,
-                    sortOrder: getProductSortOrder(keptProduct)
+                    sortOrder: getProductSortOrder(keptProduct),
+                    tileColor: tileColor
                 };
 
                 await replaceProductsInDatabase(
@@ -626,7 +644,8 @@ async function saveProduct(event) {
                     name: name,
                     price: price,
                     stock: stock,
-                    sortOrder: getProductSortOrder(product)
+                    sortOrder: getProductSortOrder(product),
+                    tileColor: tileColor
                 };
 
                 await saveProductToDatabase(updatedProduct);
@@ -638,7 +657,8 @@ async function saveProduct(event) {
                     name: name,
                     price: price,
                     stock: stock,
-                    sortOrder: getNextSortOrder()
+                    sortOrder: getNextSortOrder(),
+                    tileColor: tileColor
                 };
 
                 state.products.push(newProduct);
@@ -692,7 +712,8 @@ async function saveProduct(event) {
                     groupId: groupId,
                     variantName: variant.name,
                     variantOrder: variant.order,
-                    sortOrder: existingSortOrder
+                    sortOrder: existingSortOrder,
+                    tileColor: tileColor
                 };
             });
 

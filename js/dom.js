@@ -66,6 +66,7 @@ export const dom = {
     editingProductGroupIdInput: document.getElementById("editing-product-group-id"),
     productNameInput: document.getElementById("product-name"),
     productPriceInput: document.getElementById("product-price"),
+    productTileColorInput: document.getElementById("product-tile-color"),
     productStockInput: document.getElementById("product-stock"),
     singleStockGroup: document.getElementById("single-stock-group"),
     productHasVariantsInput: document.getElementById("product-has-variants"),
