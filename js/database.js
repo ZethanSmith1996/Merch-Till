@@ -72,6 +72,25 @@ export function loadProductsFromDatabase() {
 
         request.onsuccess = function () {
             state.products = request.result.sort(function (first, second) {
+                const firstOrder = Number.isFinite(first.sortOrder)
+                    ? first.sortOrder
+                    : first.id;
+                const secondOrder = Number.isFinite(second.sortOrder)
+                    ? second.sortOrder
+                    : second.id;
+
+                if (firstOrder !== secondOrder) {
+                    return firstOrder - secondOrder;
+                }
+
+                if (
+                    first.groupId &&
+                    second.groupId &&
+                    first.groupId === second.groupId
+                ) {
+                    return (first.variantOrder ?? 0) - (second.variantOrder ?? 0);
+                }
+
                 return first.id - second.id;
             });
             resolve(state.products);

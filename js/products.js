@@ -3,6 +3,7 @@ import {
     deleteProductFromDatabase,
     deleteProductsFromDatabase,
     saveProductToDatabase,
+    saveProductsToDatabase,
     replaceProductsInDatabase
 } from "./database.js";
 import { dom } from "./dom.js";
@@ -33,6 +34,41 @@ function isVariantProduct(product) {
     return Boolean(product.groupId && product.variantName);
 }
 
+function getProductSortOrder(product) {
+    return Number.isFinite(product.sortOrder)
+        ? product.sortOrder
+        : product.id;
+}
+
+function compareProductsForDisplay(first, second) {
+    const orderDifference =
+        getProductSortOrder(first) - getProductSortOrder(second);
+
+    if (orderDifference !== 0) {
+        return orderDifference;
+    }
+
+    if (
+        first.groupId &&
+        second.groupId &&
+        first.groupId === second.groupId
+    ) {
+        return (first.variantOrder ?? 0) - (second.variantOrder ?? 0);
+    }
+
+    return first.id - second.id;
+}
+
+function getNextSortOrder() {
+    const rows = getGroupedRows();
+
+    if (rows.length === 0) {
+        return 1;
+    }
+
+    return rows.length + 1;
+}
+
 function productsInGroup(groupId) {
     return state.products
         .filter(function (product) {
@@ -47,7 +83,9 @@ function getGroupedRows() {
     const rows = [];
     const seenGroups = new Set();
 
-    state.products.forEach(function (product) {
+    [...state.products]
+        .sort(compareProductsForDisplay)
+        .forEach(function (product) {
         if (!isVariantProduct(product)) {
             rows.push({
                 type: "single",
@@ -105,11 +143,47 @@ function renderSingleProductRow(product) {
         <td><span class="${stockClass}">${product.stock}</span></td>
         <td>
             <div class="product-actions">
+                <div class="product-order-actions" aria-label="Reorder product">
+                    <button
+                        type="button"
+                        class="move-product-button move-product-up"
+                        aria-label="Move ${escapeHTML(product.name)} up"
+                    >
+                        ↑
+                    </button>
+                    <button
+                        type="button"
+                        class="move-product-button move-product-down"
+                        aria-label="Move ${escapeHTML(product.name)} down"
+                    >
+                        ↓
+                    </button>
+                </div>
                 <button type="button" class="edit-product-button">Edit</button>
                 <button type="button" class="delete-product-button">Delete</button>
             </div>
         </td>
     `;
+
+    const singleRows = getGroupedRows();
+    const singleRowIndex = singleRows.findIndex(function (row) {
+        return row.type === "single" && row.product.id === product.id;
+    });
+
+    const moveUpButton = tableRow.querySelector(".move-product-up");
+    const moveDownButton = tableRow.querySelector(".move-product-down");
+
+    moveUpButton.disabled = singleRowIndex <= 0;
+    moveDownButton.disabled =
+        singleRowIndex < 0 || singleRowIndex >= singleRows.length - 1;
+
+    moveUpButton.addEventListener("click", function () {
+        moveProductRow(singleRowIndex, -1);
+    });
+
+    moveDownButton.addEventListener("click", function () {
+        moveProductRow(singleRowIndex, 1);
+    });
 
     tableRow
         .querySelector(".edit-product-button")
@@ -163,11 +237,47 @@ function renderVariantGroupRow(groupId, groupProducts) {
         <td><span class="${stockClass}">${totalStock}</span></td>
         <td>
             <div class="product-actions">
+                <div class="product-order-actions" aria-label="Reorder product">
+                    <button
+                        type="button"
+                        class="move-product-button move-product-up"
+                        aria-label="Move ${escapeHTML(firstProduct.name)} up"
+                    >
+                        ↑
+                    </button>
+                    <button
+                        type="button"
+                        class="move-product-button move-product-down"
+                        aria-label="Move ${escapeHTML(firstProduct.name)} down"
+                    >
+                        ↓
+                    </button>
+                </div>
                 <button type="button" class="edit-product-button">Edit</button>
                 <button type="button" class="delete-product-button">Delete</button>
             </div>
         </td>
     `;
+
+    const groupedRows = getGroupedRows();
+    const groupRowIndex = groupedRows.findIndex(function (row) {
+        return row.type === "group" && row.groupId === groupId;
+    });
+
+    const moveUpButton = tableRow.querySelector(".move-product-up");
+    const moveDownButton = tableRow.querySelector(".move-product-down");
+
+    moveUpButton.disabled = groupRowIndex <= 0;
+    moveDownButton.disabled =
+        groupRowIndex < 0 || groupRowIndex >= groupedRows.length - 1;
+
+    moveUpButton.addEventListener("click", function () {
+        moveProductRow(groupRowIndex, -1);
+    });
+
+    moveDownButton.addEventListener("click", function () {
+        moveProductRow(groupRowIndex, 1);
+    });
 
     tableRow
         .querySelector(".edit-product-button")
@@ -182,6 +292,50 @@ function renderVariantGroupRow(groupId, groupProducts) {
         });
 
     dom.productsTableBody.appendChild(tableRow);
+}
+
+async function moveProductRow(rowIndex, direction) {
+    const rows = getGroupedRows();
+    const targetIndex = rowIndex + direction;
+
+    if (
+        rowIndex < 0 ||
+        rowIndex >= rows.length ||
+        targetIndex < 0 ||
+        targetIndex >= rows.length
+    ) {
+        return;
+    }
+
+    const reorderedRows = [...rows];
+    const [movedRow] = reorderedRows.splice(rowIndex, 1);
+    reorderedRows.splice(targetIndex, 0, movedRow);
+
+    const productsToSave = [];
+
+    reorderedRows.forEach(function (row, index) {
+        const sortOrder = index + 1;
+
+        if (row.type === "single") {
+            row.product.sortOrder = sortOrder;
+            productsToSave.push(row.product);
+            return;
+        }
+
+        row.products.forEach(function (product) {
+            product.sortOrder = sortOrder;
+            productsToSave.push(product);
+        });
+    });
+
+    try {
+        await saveProductsToDatabase(productsToSave);
+        state.products.sort(compareProductsForDisplay);
+        announceProductsChanged();
+    } catch (error) {
+        console.error("Product order could not be saved:", error);
+        window.alert("The product order could not be saved.");
+    }
 }
 
 function setVariantMode(enabled) {
@@ -429,10 +583,15 @@ async function saveProduct(event) {
                 });
 
                 const collapsedProduct = {
+                    ...keptProduct,
                     id: keptProduct.id,
                     name: name,
                     price: price,
-                    stock: stock
+                    stock: stock,
+                    groupId: undefined,
+                    variantName: undefined,
+                    variantOrder: undefined,
+                    sortOrder: getProductSortOrder(keptProduct)
                 };
 
                 await replaceProductsInDatabase(
@@ -462,10 +621,12 @@ async function saveProduct(event) {
                 }
 
                 const updatedProduct = {
+                    ...product,
                     id: product.id,
                     name: name,
                     price: price,
-                    stock: stock
+                    stock: stock,
+                    sortOrder: getProductSortOrder(product)
                 };
 
                 await saveProductToDatabase(updatedProduct);
@@ -476,7 +637,8 @@ async function saveProduct(event) {
                     id: getNextProductId(),
                     name: name,
                     price: price,
-                    stock: stock
+                    stock: stock,
+                    sortOrder: getNextSortOrder()
                 };
 
                 state.products.push(newProduct);
@@ -503,6 +665,11 @@ async function saveProduct(event) {
             let nextId = getNextProductId();
             const usedIds = new Set();
 
+            const existingSortOrder =
+                existingGroupProducts.length > 0
+                    ? getProductSortOrder(existingGroupProducts[0])
+                    : getNextSortOrder();
+
             const updatedVariants = variants.map(function (variant, index) {
                 let id = variant.productId;
 
@@ -524,7 +691,8 @@ async function saveProduct(event) {
                     stock: variant.stock,
                     groupId: groupId,
                     variantName: variant.name,
-                    variantOrder: variant.order
+                    variantOrder: variant.order,
+                    sortOrder: existingSortOrder
                 };
             });
 
@@ -555,9 +723,7 @@ async function saveProduct(event) {
             state.products.push(...updatedVariants);
         }
 
-        state.products.sort(function (first, second) {
-            return first.id - second.id;
-        });
+        state.products.sort(compareProductsForDisplay);
 
         closeProductModal();
         announceProductsChanged();
