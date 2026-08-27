@@ -32,6 +32,7 @@ import {
     initialiseUserManagement,
     renderUsersTable
 } from "./users.js";
+import { initialiseCloudSync } from "./cloud-sync.js";
 
 function refreshProductDisplays() {
     renderTillProducts();
@@ -53,6 +54,7 @@ async function startApplication() {
     initialiseSessions();
     initialiseReports();
     initialiseUserManagement();
+    initialiseCloudSync();
 
     document.addEventListener("products-changed", refreshProductDisplays);
     document.addEventListener("user-role-changed", refreshRolePermissions);

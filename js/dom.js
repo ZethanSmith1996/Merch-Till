@@ -9,6 +9,10 @@ export const dom = {
     logoutButton: document.getElementById("logout-button"),
     loggedInUser: document.getElementById("logged-in-user"),
 
+    uploadCloudDataButton: document.getElementById("upload-cloud-data-button"),
+    cloudUploadCounts: document.getElementById("cloud-upload-counts"),
+    cloudUploadStatus: document.getElementById("cloud-upload-status"),
+
     usersTableBody: document.getElementById("users-table-body"),
     noUsersMessage: document.getElementById("no-users-message"),
     addUserButton: document.getElementById("add-user-button"),
