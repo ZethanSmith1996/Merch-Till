@@ -388,6 +388,45 @@ export function replaceCloudDataInDatabase(products, sales, sessions) {
     });
 }
 
+
+export function replaceCloudCatalogueInDatabase(products, sessions) {
+    return new Promise(function (resolve, reject) {
+        const transaction = state.database.transaction(
+            ["products", "sessions"],
+            "readwrite"
+        );
+
+        const productsStore = transaction.objectStore("products");
+        const sessionsStore = transaction.objectStore("sessions");
+
+        productsStore.clear();
+        sessionsStore.clear();
+
+        products.forEach(function (product) {
+            productsStore.put(product);
+        });
+
+        sessions.forEach(function (session) {
+            sessionsStore.put(session);
+        });
+
+        transaction.oncomplete = function () {
+            resolve();
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error);
+        };
+
+        transaction.onabort = function () {
+            reject(
+                transaction.error ||
+                new Error("Cloud catalogue replacement aborted.")
+            );
+        };
+    });
+}
+
 export function loadUsersFromDatabase() {
     return new Promise(function (resolve, reject) {
         const transaction = state.database.transaction("users", "readonly");

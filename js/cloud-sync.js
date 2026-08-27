@@ -3,7 +3,7 @@ import { state } from "./state.js";
 import { supabaseConfig } from "./config.js";
 import { isMasterAdmin } from "./permissions.js";
 import { getValidCloudAccessToken, isCloudUsername } from "./auth.js";
-import { replaceCloudDataInDatabase } from "./database.js";
+import { replaceCloudDataInDatabase, replaceCloudCatalogueInDatabase } from "./database.js";
 
 const CLOUD_DIRTY_KEY = "merchTillCloudDirty";
 let syncTimer = null;
@@ -187,6 +187,21 @@ async function upsertRows(tableName, rows) {
     });
 }
 
+async function insertRowsIgnoringDuplicates(tableName, rows) {
+    if (rows.length === 0) {
+        return;
+    }
+
+    await cloudRequest(`${tableName}?on_conflict=id`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Prefer": "resolution=ignore-duplicates,return=minimal"
+        },
+        body: JSON.stringify(rows)
+    });
+}
+
 async function deleteCloudProduct(productId) {
     await cloudRequest(`products?id=eq.${encodeURIComponent(productId)}`, {
         method: "DELETE",
@@ -226,6 +241,16 @@ async function syncSessionsSnapshot() {
 }
 
 async function syncSalesSnapshot() {
+    const role = sessionStorage.getItem("merchTillRole") || "";
+
+    // Staff are allowed to create sales but not browse or modify historic
+    // transactions. Ignore duplicate IDs so an ordinary sale can upload
+    // without requiring UPDATE permission on existing cloud sales.
+    if (role === "staff") {
+        await insertRowsIgnoringDuplicates("sales", state.sales.map(mapSale));
+        return;
+    }
+
     await upsertRows("sales", state.sales.map(mapSale));
 }
 
@@ -278,11 +303,15 @@ export async function refreshLocalCacheFromCloud() {
     updateCloudUploadStatus("Loading shared Till data from the cloud…");
 
     try {
-        const [productRows, sessionRows, saleRows] = await Promise.all([
-            fetchCloudRows("products"),
-            fetchCloudRows("sessions"),
-            fetchCloudRows("sales")
-        ]);
+        const role = sessionStorage.getItem("merchTillRole") || "";
+        const staffMode = role === "staff";
+
+        // Staff do not have permission to browse historic sales. They only
+        // need the shared product catalogue and current session to operate
+        // the Till. Admins continue to download the full reporting dataset.
+        const productRows = await fetchCloudRows("products");
+        const sessionRows = await fetchCloudRows("sessions");
+        const saleRows = staffMode ? null : await fetchCloudRows("sales");
 
         const products = productRows
             .map(unmapProduct)
@@ -294,17 +323,29 @@ export async function refreshLocalCacheFromCloud() {
                 return second.openedAt.localeCompare(first.openedAt);
             });
 
-        const sales = saleRows
-            .map(unmapSale)
-            .sort(function (first, second) {
-                return second.createdAt.localeCompare(first.createdAt);
-            });
+        let sales = state.sales;
 
-        await replaceCloudDataInDatabase(products, sales, sessions);
+        if (!staffMode) {
+            sales = saleRows
+                .map(unmapSale)
+                .sort(function (first, second) {
+                    return second.createdAt.localeCompare(first.createdAt);
+                });
+
+            await replaceCloudDataInDatabase(products, sales, sessions);
+        } else {
+            // Preserve the work tablet's local historic sales cache. A new
+            // Staff device receives only the data Staff actually needs.
+            await replaceCloudCatalogueInDatabase(products, sessions);
+        }
 
         state.products = products;
         state.sessions = sessions;
-        state.sales = sales;
+
+        if (!staffMode) {
+            state.sales = sales;
+        }
+
         state.currentSession =
             sessions.find(function (session) {
                 return session.status === "open";
@@ -358,6 +399,10 @@ function writeDirtyState(dirty) {
 }
 
 function markDirty(changes) {
+    if ((sessionStorage.getItem("merchTillRole") || "") === "training") {
+        return;
+    }
+
     const dirty = readDirtyState();
 
     Object.keys(changes).forEach(function (key) {
