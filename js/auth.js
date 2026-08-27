@@ -6,41 +6,114 @@ import { supabaseConfig } from "./config.js";
 const CLOUD_ACCESS_TOKEN_KEY = "merchTillCloudAccessToken";
 const CLOUD_REFRESH_TOKEN_KEY = "merchTillCloudRefreshToken";
 const CLOUD_EXPIRES_AT_KEY = "merchTillCloudExpiresAt";
+const CLOUD_SESSION_OWNER_KEY = "merchTillCloudSessionOwner";
 
-function migrateLegacyCloudSession() {
-    const legacyAccessToken = sessionStorage.getItem(CLOUD_ACCESS_TOKEN_KEY);
-    const legacyRefreshToken = sessionStorage.getItem(CLOUD_REFRESH_TOKEN_KEY);
+function normaliseCloudUsername(username) {
+    return String(username || "").trim().toLowerCase();
+}
 
-    if (!localStorage.getItem(CLOUD_ACCESS_TOKEN_KEY) && legacyAccessToken) {
-        localStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, legacyAccessToken);
+function scopedCloudKey(baseKey, username) {
+    return `${baseKey}:${normaliseCloudUsername(username)}`;
+}
+
+function currentCloudUsername() {
+    return normaliseCloudUsername(
+        sessionStorage.getItem("merchTillUsername") || ""
+    );
+}
+
+function migrateLegacyCloudSession(username) {
+    const normalisedUsername = normaliseCloudUsername(username);
+
+    if (!normalisedUsername) {
+        return;
     }
 
-    if (!localStorage.getItem(CLOUD_REFRESH_TOKEN_KEY) && legacyRefreshToken) {
-        localStorage.setItem(CLOUD_REFRESH_TOKEN_KEY, legacyRefreshToken);
+    const owner = normaliseCloudUsername(
+        localStorage.getItem(CLOUD_SESSION_OWNER_KEY) || ""
+    );
+
+    // Only migrate an old unscoped session when we can prove which Till user
+    // created it. Older builds did not always record an owner, so an unowned
+    // token is deliberately not reused for another account.
+    if (owner !== normalisedUsername) {
+        return;
+    }
+
+    const scopedAccessKey =
+        scopedCloudKey(CLOUD_ACCESS_TOKEN_KEY, normalisedUsername);
+    const scopedRefreshKey =
+        scopedCloudKey(CLOUD_REFRESH_TOKEN_KEY, normalisedUsername);
+    const scopedExpiryKey =
+        scopedCloudKey(CLOUD_EXPIRES_AT_KEY, normalisedUsername);
+
+    if (!localStorage.getItem(scopedAccessKey)) {
+        const legacyAccess = localStorage.getItem(CLOUD_ACCESS_TOKEN_KEY);
+        if (legacyAccess) {
+            localStorage.setItem(scopedAccessKey, legacyAccess);
+        }
+    }
+
+    if (!localStorage.getItem(scopedRefreshKey)) {
+        const legacyRefresh = localStorage.getItem(CLOUD_REFRESH_TOKEN_KEY);
+        if (legacyRefresh) {
+            localStorage.setItem(scopedRefreshKey, legacyRefresh);
+        }
+    }
+
+    if (!localStorage.getItem(scopedExpiryKey)) {
+        const legacyExpiry = localStorage.getItem(CLOUD_EXPIRES_AT_KEY);
+        if (legacyExpiry) {
+            localStorage.setItem(scopedExpiryKey, legacyExpiry);
+        }
     }
 }
 
-migrateLegacyCloudSession();
+function saveCloudSession(authData, username) {
+    const normalisedUsername = normaliseCloudUsername(username);
 
-function saveCloudSession(authData) {
+    if (!normalisedUsername) {
+        throw new Error("Cloud session username is missing.");
+    }
+
     if (authData.access_token) {
-        localStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, authData.access_token);
+        localStorage.setItem(
+            scopedCloudKey(CLOUD_ACCESS_TOKEN_KEY, normalisedUsername),
+            authData.access_token
+        );
     }
 
     if (authData.refresh_token) {
-        localStorage.setItem(CLOUD_REFRESH_TOKEN_KEY, authData.refresh_token);
+        localStorage.setItem(
+            scopedCloudKey(CLOUD_REFRESH_TOKEN_KEY, normalisedUsername),
+            authData.refresh_token
+        );
     }
 
     if (Number(authData.expires_in) > 0) {
         localStorage.setItem(
-            CLOUD_EXPIRES_AT_KEY,
+            scopedCloudKey(CLOUD_EXPIRES_AT_KEY, normalisedUsername),
             String(Date.now() + Number(authData.expires_in) * 1000)
         );
     }
+
+    // Retained only to permit safe one-time migration from Stage 13's
+    // unscoped token layout.
+    localStorage.setItem(CLOUD_SESSION_OWNER_KEY, normalisedUsername);
 }
 
-async function refreshCloudSession() {
-    const refreshToken = localStorage.getItem(CLOUD_REFRESH_TOKEN_KEY);
+async function refreshCloudSession(username) {
+    const normalisedUsername = normaliseCloudUsername(username);
+
+    if (!normalisedUsername) {
+        return null;
+    }
+
+    migrateLegacyCloudSession(normalisedUsername);
+
+    const refreshToken = localStorage.getItem(
+        scopedCloudKey(CLOUD_REFRESH_TOKEN_KEY, normalisedUsername)
+    );
 
     if (!refreshToken) {
         return null;
@@ -70,7 +143,7 @@ async function refreshCloudSession() {
         return null;
     }
 
-    saveCloudSession(authData);
+    saveCloudSession(authData, normalisedUsername);
     return authData.access_token;
 }
 
@@ -92,19 +165,46 @@ async function tokenStillValid(accessToken) {
     return response.ok;
 }
 
-export async function getValidCloudAccessToken() {
-    migrateLegacyCloudSession();
+async function tokenBelongsToUsername(accessToken, username) {
+    if (!accessToken) {
+        return false;
+    }
 
-    const accessToken = localStorage.getItem(CLOUD_ACCESS_TOKEN_KEY) || "";
-    const expiresAt = Number(localStorage.getItem(CLOUD_EXPIRES_AT_KEY) || 0);
+    return Boolean(await loadCloudProfile(accessToken, username));
+}
+
+export async function getValidCloudAccessToken() {
+    const username = currentCloudUsername();
+
+    if (!username || !isCloudUsername(username)) {
+        return null;
+    }
+
+    migrateLegacyCloudSession(username);
+
+    const accessToken = localStorage.getItem(
+        scopedCloudKey(CLOUD_ACCESS_TOKEN_KEY, username)
+    ) || "";
+
+    const expiresAt = Number(
+        localStorage.getItem(
+            scopedCloudKey(CLOUD_EXPIRES_AT_KEY, username)
+        ) || 0
+    );
 
     if (accessToken && expiresAt > Date.now() + 60000) {
-        return accessToken;
+        try {
+            if (await tokenBelongsToUsername(accessToken, username)) {
+                return accessToken;
+            }
+        } catch (error) {
+            console.warn("Cloud session ownership could not be checked:", error);
+        }
     }
 
     if (accessToken && !expiresAt) {
         try {
-            if (await tokenStillValid(accessToken)) {
+            if (await tokenBelongsToUsername(accessToken, username)) {
                 return accessToken;
             }
         } catch (error) {
@@ -113,7 +213,16 @@ export async function getValidCloudAccessToken() {
     }
 
     try {
-        return await refreshCloudSession();
+        const refreshedToken = await refreshCloudSession(username);
+
+        if (
+            refreshedToken &&
+            await tokenBelongsToUsername(refreshedToken, username)
+        ) {
+            return refreshedToken;
+        }
+
+        return null;
     } catch (error) {
         console.warn("Cloud session could not be refreshed:", error);
         return null;
@@ -217,7 +326,7 @@ async function signInToSupabase(username, password) {
         );
     }
 
-    saveCloudSession(authData);
+    saveCloudSession(authData, username);
 
     return {
         username: profile.username,
@@ -385,9 +494,9 @@ export function initialiseAuthentication() {
     });
 
     dom.logoutButton.addEventListener("click", function () {
-        // This signs out of the Till UI only. The paired Supabase session stays
-        // on this device so local staff accounts can keep automatic cloud sync
-        // running in the background.
+        // This signs out of the Till UI only. Each cloud user's Supabase
+        // refresh session remains securely scoped to that username on this
+        // device so offline work can resume after reconnecting.
         sessionStorage.clear();
         clearCart();
         showLogin();
