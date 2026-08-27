@@ -236,6 +236,29 @@ async function syncProductsSnapshot() {
     }
 }
 
+async function syncStaffProductStockSnapshot() {
+    // Staff are permitted to update existing product rows, but not create,
+    // delete, reorder or otherwise manage the catalogue. Send only the stock
+    // value for each known product so a completed sale can reach the cloud
+    // without requiring Admin product-management privileges.
+    for (const product of state.products) {
+        await cloudRequest(
+            `products?id=eq.${encodeURIComponent(product.id)}`,
+            {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                body: JSON.stringify({
+                    stock: Number(product.stock) || 0,
+                    cloud_updated_at: new Date().toISOString()
+                })
+            }
+        );
+    }
+}
+
 async function syncSessionsSnapshot() {
     await upsertRows("sessions", state.sessions.map(mapSession));
 }
@@ -460,26 +483,47 @@ export async function flushPendingCloudSync() {
     updateCloudUploadStatus("Automatic cloud sync in progress…");
 
     try {
-        // Sales depend on sessions through a foreign key. Always ensure the
-        // session snapshot is current before attempting a sales upload.
-        if (dirty.sessions || dirty.sales) {
-            await syncSessionsSnapshot();
-            dirty.sessions = false;
-            writeDirtyState(dirty);
-        }
+        const role = sessionStorage.getItem("merchTillRole") || "";
+        const staffMode = role === "staff";
 
-        // A completed/voided sale also changes stock, so a sales sync always
-        // refreshes products before the sale itself.
-        if (dirty.products || dirty.sales) {
-            await syncProductsSnapshot();
-            dirty.products = false;
-            writeDirtyState(dirty);
-        }
+        if (staffMode) {
+            // Staff never create or modify trading sessions. The current
+            // session already exists in Supabase and is only read by Staff.
+            // Do not attempt the Admin-only session upsert here.
 
-        if (dirty.sales) {
-            await syncSalesSnapshot();
-            dirty.sales = false;
-            writeDirtyState(dirty);
+            // A Staff sale changes stock. PATCH only the stock fields of
+            // existing products rather than upserting/managing the catalogue.
+            if (dirty.products || dirty.sales) {
+                await syncStaffProductStockSnapshot();
+                dirty.products = false;
+                writeDirtyState(dirty);
+            }
+
+            if (dirty.sales) {
+                await syncSalesSnapshot();
+                dirty.sales = false;
+                writeDirtyState(dirty);
+            }
+        } else {
+            // Admin/Master accounts retain the full snapshot synchronisation
+            // behaviour used for product management, sessions and reports.
+            if (dirty.sessions || dirty.sales) {
+                await syncSessionsSnapshot();
+                dirty.sessions = false;
+                writeDirtyState(dirty);
+            }
+
+            if (dirty.products || dirty.sales) {
+                await syncProductsSnapshot();
+                dirty.products = false;
+                writeDirtyState(dirty);
+            }
+
+            if (dirty.sales) {
+                await syncSalesSnapshot();
+                dirty.sales = false;
+                writeDirtyState(dirty);
+            }
         }
 
         const completedAt = new Date().toLocaleTimeString("en-GB", {
