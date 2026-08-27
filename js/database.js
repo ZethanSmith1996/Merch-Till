@@ -344,6 +344,50 @@ export function closeSessionInDatabase(session) {
     });
 }
 
+export function replaceCloudDataInDatabase(products, sales, sessions) {
+    return new Promise(function (resolve, reject) {
+        const transaction = state.database.transaction(
+            ["products", "sales", "sessions"],
+            "readwrite"
+        );
+
+        const productsStore = transaction.objectStore("products");
+        const salesStore = transaction.objectStore("sales");
+        const sessionsStore = transaction.objectStore("sessions");
+
+        productsStore.clear();
+        salesStore.clear();
+        sessionsStore.clear();
+
+        products.forEach(function (product) {
+            productsStore.put(product);
+        });
+
+        sales.forEach(function (sale) {
+            salesStore.put(sale);
+        });
+
+        sessions.forEach(function (session) {
+            sessionsStore.put(session);
+        });
+
+        transaction.oncomplete = function () {
+            resolve();
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error);
+        };
+
+        transaction.onabort = function () {
+            reject(
+                transaction.error ||
+                new Error("Cloud cache replacement aborted.")
+            );
+        };
+    });
+}
+
 export function loadUsersFromDatabase() {
     return new Promise(function (resolve, reject) {
         const transaction = state.database.transaction("users", "readonly");

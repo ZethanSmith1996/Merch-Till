@@ -5,6 +5,120 @@ import { supabaseConfig } from "./config.js";
 
 const CLOUD_ACCESS_TOKEN_KEY = "merchTillCloudAccessToken";
 const CLOUD_REFRESH_TOKEN_KEY = "merchTillCloudRefreshToken";
+const CLOUD_EXPIRES_AT_KEY = "merchTillCloudExpiresAt";
+
+function migrateLegacyCloudSession() {
+    const legacyAccessToken = sessionStorage.getItem(CLOUD_ACCESS_TOKEN_KEY);
+    const legacyRefreshToken = sessionStorage.getItem(CLOUD_REFRESH_TOKEN_KEY);
+
+    if (!localStorage.getItem(CLOUD_ACCESS_TOKEN_KEY) && legacyAccessToken) {
+        localStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, legacyAccessToken);
+    }
+
+    if (!localStorage.getItem(CLOUD_REFRESH_TOKEN_KEY) && legacyRefreshToken) {
+        localStorage.setItem(CLOUD_REFRESH_TOKEN_KEY, legacyRefreshToken);
+    }
+}
+
+migrateLegacyCloudSession();
+
+function saveCloudSession(authData) {
+    if (authData.access_token) {
+        localStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, authData.access_token);
+    }
+
+    if (authData.refresh_token) {
+        localStorage.setItem(CLOUD_REFRESH_TOKEN_KEY, authData.refresh_token);
+    }
+
+    if (Number(authData.expires_in) > 0) {
+        localStorage.setItem(
+            CLOUD_EXPIRES_AT_KEY,
+            String(Date.now() + Number(authData.expires_in) * 1000)
+        );
+    }
+}
+
+async function refreshCloudSession() {
+    const refreshToken = localStorage.getItem(CLOUD_REFRESH_TOKEN_KEY);
+
+    if (!refreshToken) {
+        return null;
+    }
+
+    const response = await fetch(
+        `${supabaseConfig.url}/auth/v1/token?grant_type=refresh_token`,
+        {
+            method: "POST",
+            headers: {
+                "apikey": supabaseConfig.publishableKey,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                refresh_token: refreshToken
+            })
+        }
+    );
+
+    if (!response.ok) {
+        return null;
+    }
+
+    const authData = await response.json();
+
+    if (!authData.access_token) {
+        return null;
+    }
+
+    saveCloudSession(authData);
+    return authData.access_token;
+}
+
+async function tokenStillValid(accessToken) {
+    if (!accessToken) {
+        return false;
+    }
+
+    const response = await fetch(
+        `${supabaseConfig.url}/auth/v1/user`,
+        {
+            headers: {
+                "apikey": supabaseConfig.publishableKey,
+                "Authorization": `Bearer ${accessToken}`
+            }
+        }
+    );
+
+    return response.ok;
+}
+
+export async function getValidCloudAccessToken() {
+    migrateLegacyCloudSession();
+
+    const accessToken = localStorage.getItem(CLOUD_ACCESS_TOKEN_KEY) || "";
+    const expiresAt = Number(localStorage.getItem(CLOUD_EXPIRES_AT_KEY) || 0);
+
+    if (accessToken && expiresAt > Date.now() + 60000) {
+        return accessToken;
+    }
+
+    if (accessToken && !expiresAt) {
+        try {
+            if (await tokenStillValid(accessToken)) {
+                return accessToken;
+            }
+        } catch (error) {
+            console.warn("Cloud session could not be checked:", error);
+        }
+    }
+
+    try {
+        return await refreshCloudSession();
+    } catch (error) {
+        console.warn("Cloud session could not be refreshed:", error);
+        return null;
+    }
+}
 
 export function showApplication(username) {
     dom.loginScreen.hidden = true;
@@ -21,7 +135,7 @@ export function showLogin() {
     dom.errorMessage.textContent = "";
 }
 
-function isCloudUsername(username) {
+export function isCloudUsername(username) {
     return Boolean(
         supabaseConfig.cloudUsers[
             String(username || "").toLowerCase()
@@ -33,11 +147,6 @@ function getCloudUserConfig(username) {
     return supabaseConfig.cloudUsers[
         String(username || "").toLowerCase()
     ] || null;
-}
-
-function clearCloudSession() {
-    sessionStorage.removeItem(CLOUD_ACCESS_TOKEN_KEY);
-    sessionStorage.removeItem(CLOUD_REFRESH_TOKEN_KEY);
 }
 
 async function signInToSupabase(username, password) {
@@ -92,9 +201,7 @@ async function signInToSupabase(username, password) {
     );
 
     if (!profileResponse.ok) {
-        throw new Error(
-            "Your cloud profile could not be loaded."
-        );
+        throw new Error("Your cloud profile could not be loaded.");
     }
 
     const profiles = await profileResponse.json();
@@ -110,17 +217,7 @@ async function signInToSupabase(username, password) {
         );
     }
 
-    sessionStorage.setItem(
-        CLOUD_ACCESS_TOKEN_KEY,
-        authData.access_token
-    );
-
-    if (authData.refresh_token) {
-        sessionStorage.setItem(
-            CLOUD_REFRESH_TOKEN_KEY,
-            authData.refresh_token
-        );
-    }
+    saveCloudSession(authData);
 
     return {
         username: profile.username,
@@ -181,9 +278,7 @@ async function loadCloudProfile(accessToken, username) {
 }
 
 async function restoreCloudSession(username) {
-    const accessToken = sessionStorage.getItem(
-        CLOUD_ACCESS_TOKEN_KEY
-    );
+    const accessToken = await getValidCloudAccessToken();
 
     if (!accessToken) {
         return null;
@@ -193,8 +288,7 @@ async function restoreCloudSession(username) {
 }
 
 export async function validateSavedSession() {
-    const savedUsername =
-        sessionStorage.getItem("merchTillUsername");
+    const savedUsername = sessionStorage.getItem("merchTillUsername");
 
     if (!savedUsername) {
         return;
@@ -202,9 +296,7 @@ export async function validateSavedSession() {
 
     if (isCloudUsername(savedUsername)) {
         try {
-            const profile = await restoreCloudSession(
-                savedUsername
-            );
+            const profile = await restoreCloudSession(savedUsername);
 
             if (!profile) {
                 sessionStorage.clear();
@@ -212,17 +304,11 @@ export async function validateSavedSession() {
                 return;
             }
 
-            sessionStorage.setItem(
-                "merchTillRole",
-                profile.role
-            );
+            sessionStorage.setItem("merchTillRole", profile.role);
             showApplication(profile.username);
             return;
         } catch (error) {
-            console.error(
-                "Saved cloud session could not be restored:",
-                error
-            );
+            console.error("Saved cloud session could not be restored:", error);
             sessionStorage.clear();
             showLogin();
             return;
@@ -230,10 +316,7 @@ export async function validateSavedSession() {
     }
 
     const user = state.users.find(function (item) {
-        return (
-            item.username === savedUsername &&
-            item.active
-        );
+        return item.username === savedUsername && item.active;
     });
 
     if (!user) {
@@ -242,162 +325,82 @@ export async function validateSavedSession() {
         return;
     }
 
-    sessionStorage.setItem(
-        "merchTillRole",
-        user.role
-    );
+    sessionStorage.setItem("merchTillRole", user.role);
     showApplication(user.username);
 }
 
 export function initialiseAuthentication() {
-    dom.loginForm.addEventListener(
-        "submit",
-        async function (event) {
-            event.preventDefault();
+    dom.loginForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
 
-            const enteredUsername =
-                document
-                    .getElementById("username")
-                    .value
-                    .trim();
+        const enteredUsername =
+            document.getElementById("username").value.trim();
+        const enteredPassword =
+            document.getElementById("password").value;
 
-            const enteredPassword =
-                document.getElementById("password").value;
+        dom.errorMessage.textContent = "";
 
-            dom.errorMessage.textContent = "";
-
-            if (isCloudUsername(enteredUsername)) {
-                try {
-                    const cloudProfile =
-                        await signInToSupabase(
-                            enteredUsername,
-                            enteredPassword
-                        );
-
-                    sessionStorage.setItem(
-                        "merchTillLoggedIn",
-                        "true"
-                    );
-                    sessionStorage.setItem(
-                        "merchTillUsername",
-                        cloudProfile.username
-                    );
-                    sessionStorage.setItem(
-                        "merchTillRole",
-                        cloudProfile.role
-                    );
-
-                    showApplication(
-                        cloudProfile.username
-                    );
-                    return;
-                } catch (error) {
-                    console.error(
-                        "Cloud login failed:",
-                        error
-                    );
-
-                    dom.errorMessage.textContent =
-                        error.message ||
-                        "Incorrect username or password.";
-
-                    document.getElementById(
-                        "password"
-                    ).value = "";
-
-                    return;
-                }
-            }
-
-            const matchingUser =
-                state.users.find(function (user) {
-                    return (
-                        user.active &&
-                        user.username === enteredUsername &&
-                        user.password === enteredPassword
-                    );
-                });
-
-            if (matchingUser) {
-                sessionStorage.setItem(
-                    "merchTillLoggedIn",
-                    "true"
+        if (isCloudUsername(enteredUsername)) {
+            try {
+                const cloudProfile = await signInToSupabase(
+                    enteredUsername,
+                    enteredPassword
                 );
-                sessionStorage.setItem(
-                    "merchTillUsername",
-                    matchingUser.username
-                );
-                sessionStorage.setItem(
-                    "merchTillRole",
-                    matchingUser.role
-                );
-                showApplication(
-                    matchingUser.username
+
+                sessionStorage.setItem("merchTillLoggedIn", "true");
+                sessionStorage.setItem("merchTillUsername", cloudProfile.username);
+                sessionStorage.setItem("merchTillRole", cloudProfile.role);
+                showApplication(cloudProfile.username);
+                document.dispatchEvent(
+                    new CustomEvent("cloud-authenticated")
                 );
                 return;
+            } catch (error) {
+                console.error("Cloud login failed:", error);
+                dom.errorMessage.textContent =
+                    error.message || "Incorrect username or password.";
+                document.getElementById("password").value = "";
+                return;
             }
-
-            dom.errorMessage.textContent =
-                "Incorrect username or password.";
-
-            document.getElementById(
-                "password"
-            ).value = "";
         }
-    );
 
-    dom.logoutButton.addEventListener(
-        "click",
-        async function () {
-            const accessToken =
-                sessionStorage.getItem(
-                    CLOUD_ACCESS_TOKEN_KEY
-                );
-
-            if (accessToken) {
-                try {
-                    await fetch(
-                        `${supabaseConfig.url}/auth/v1/logout`,
-                        {
-                            method: "POST",
-                            headers: {
-                                "apikey":
-                                    supabaseConfig.publishableKey,
-                                "Authorization":
-                                    `Bearer ${accessToken}`
-                            }
-                        }
-                    );
-                } catch (error) {
-                    console.warn(
-                        "Cloud logout request failed:",
-                        error
-                    );
-                }
-            }
-
-            sessionStorage.clear();
-            clearCloudSession();
-            clearCart();
-            showLogin();
-
-            document.dispatchEvent(
-                new CustomEvent("user-role-changed")
+        const matchingUser = state.users.find(function (user) {
+            return (
+                user.active &&
+                user.username === enteredUsername &&
+                user.password === enteredPassword
             );
+        });
+
+        if (matchingUser) {
+            sessionStorage.setItem("merchTillLoggedIn", "true");
+            sessionStorage.setItem("merchTillUsername", matchingUser.username);
+            sessionStorage.setItem("merchTillRole", matchingUser.role);
+            showApplication(matchingUser.username);
+            return;
         }
-    );
 
-    const savedLogin =
-        sessionStorage.getItem("merchTillLoggedIn");
+        dom.errorMessage.textContent = "Incorrect username or password.";
+        document.getElementById("password").value = "";
+    });
 
-    const savedUsername =
-        sessionStorage.getItem("merchTillUsername");
+    dom.logoutButton.addEventListener("click", function () {
+        // This signs out of the Till UI only. The paired Supabase session stays
+        // on this device so local staff accounts can keep automatic cloud sync
+        // running in the background.
+        sessionStorage.clear();
+        clearCart();
+        showLogin();
+        document.dispatchEvent(new CustomEvent("user-role-changed"));
+    });
+
+    const savedLogin = sessionStorage.getItem("merchTillLoggedIn");
+    const savedUsername = sessionStorage.getItem("merchTillUsername");
 
     if (savedLogin === "true" && savedUsername) {
         dom.loginScreen.hidden = true;
         dom.appScreen.hidden = false;
-        dom.loggedInUser.textContent =
-            savedUsername;
+        dom.loggedInUser.textContent = savedUsername;
     } else {
         showLogin();
     }

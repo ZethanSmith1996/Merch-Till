@@ -1,4 +1,4 @@
-import { initialiseAuthentication, validateSavedSession } from "./auth.js";
+import { initialiseAuthentication, validateSavedSession, isCloudUsername } from "./auth.js";
 import {
     initialiseProductDatabase,
     initialiseUsersDatabase,
@@ -32,7 +32,7 @@ import {
     initialiseUserManagement,
     renderUsersTable
 } from "./users.js";
-import { initialiseCloudSync } from "./cloud-sync.js";
+import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js";
 
 function refreshProductDisplays() {
     renderTillProducts();
@@ -58,6 +58,13 @@ async function startApplication() {
 
     document.addEventListener("products-changed", refreshProductDisplays);
     document.addEventListener("user-role-changed", refreshRolePermissions);
+    document.addEventListener("cloud-data-loaded", function () {
+        restoreCurrentOrderNumber();
+        refreshProductDisplays();
+        refreshTillAvailability();
+        renderSessionStatus();
+        renderReports();
+    });
 
     try {
         await initialiseProductDatabase();
@@ -67,6 +74,16 @@ async function startApplication() {
         restoreCurrentOrderNumber();
 
         await validateSavedSession();
+
+        const signedInUsername =
+            sessionStorage.getItem("merchTillUsername") || "";
+
+        if (isCloudUsername(signedInUsername)) {
+            await refreshLocalCacheFromCloud();
+        } else {
+            await flushPendingCloudSync();
+        }
+
         refreshProductDisplays();
         renderUsersTable();
         applyNavigationPermissions();
