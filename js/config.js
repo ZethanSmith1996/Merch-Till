@@ -1,3 +1,13 @@
+export const supabaseConfig = {
+    url: "https://zdxduhnfjebahfzuqttk.supabase.co",
+    publishableKey: "sb_publishable_ReTBviIlpav9HsnAqcxnSA_l6yHSGhy",
+    cloudUsers: {
+        master: {
+            email: "zethansmith@icloud.com"
+        }
+    }
+};
+
 export const bootstrapUsers = [
     {
         username: "master",

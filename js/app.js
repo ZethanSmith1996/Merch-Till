@@ -64,7 +64,7 @@ async function startApplication() {
         await loadSessionsFromDatabase();
         restoreCurrentOrderNumber();
 
-        validateSavedSession();
+        await validateSavedSession();
         refreshProductDisplays();
         renderUsersTable();
         applyNavigationPermissions();
