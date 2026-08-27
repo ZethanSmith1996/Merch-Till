@@ -146,7 +146,7 @@ async function cloudRequest(path, options = {}) {
 
     if (!accessToken) {
         throw new Error(
-            "This device is not currently paired with the Master Supabase account."
+            "No valid Supabase session is available for the current cloud user."
         );
     }
 
@@ -650,27 +650,57 @@ export function initialiseCloudSync() {
         markDirty({ sessions: true });
     });
 
-    window.addEventListener("online", async function () {
-        await flushPendingCloudSync();
-        await refreshLocalCacheFromCloud();
+    async function retryPendingCloudWork() {
+        if (!navigator.onLine || !hasPendingCloudChanges()) {
+            return;
+        }
+
+        const synced = await flushPendingCloudSync();
+
+        if (synced && !hasPendingCloudChanges()) {
+            await refreshLocalCacheFromCloud();
+        }
+    }
+
+    window.addEventListener("online", function () {
+        // On mobile, the browser can announce "online" slightly before the
+        // network is actually usable. Retry immediately and a few seconds
+        // later so Staff sales do not need an Admin login to wake the sync.
+        retryPendingCloudWork();
+
+        window.setTimeout(retryPendingCloudWork, 2000);
+        window.setTimeout(retryPendingCloudWork, 8000);
     });
 
-    document.addEventListener("cloud-authenticated", function () {
-        refreshLocalCacheFromCloud();
+    document.addEventListener("cloud-authenticated", async function () {
+        await retryPendingCloudWork();
+
+        if (!hasPendingCloudChanges()) {
+            await refreshLocalCacheFromCloud();
+        }
     });
 
     document.addEventListener("visibilitychange", function () {
         if (!document.hidden) {
-            refreshLocalCacheFromCloud();
+            retryPendingCloudWork().then(function () {
+                if (!hasPendingCloudChanges()) {
+                    refreshLocalCacheFromCloud();
+                }
+            });
         }
     });
 
-    // Retry pending work periodically in case a request failed while the Till
-    // remained online but Supabase was temporarily unavailable.
+    // Mobile browsers frequently suspend timers/network events while in the
+    // background. Treat focus/pageshow as another opportunity to flush any
+    // locally stored sales as soon as the Till becomes active again.
+    window.addEventListener("focus", retryPendingCloudWork);
+    window.addEventListener("pageshow", retryPendingCloudWork);
+
+    // Fast lightweight retry while there is genuinely pending work. When
+    // there is nothing dirty this does no network request.
     window.setInterval(function () {
-        const dirty = readDirtyState();
-        if (dirty.products || dirty.sessions || dirty.sales) {
-            flushPendingCloudSync();
+        if (navigator.onLine && hasPendingCloudChanges()) {
+            retryPendingCloudWork();
         }
-    }, 60000);
+    }, 5000);
 }
