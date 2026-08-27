@@ -221,19 +221,33 @@ export function saveCompletedSaleTransaction(sale, updatedProducts) {
         );
 
         const productStore = transaction.objectStore("products");
-        const saleRequest = transaction.objectStore("sales").add(sale);
-        let savedSaleId = null;
+
+        // Sale IDs must be unique across every device. IndexedDB's normal
+        // auto-increment counter is device-local, so two devices can both
+        // create sale ID 1, 2, 3, etc. A time-based ID avoids those clashes
+        // while remaining a safe integer for the Supabase bigint column.
+        const uniqueSaleId =
+            (Date.now() * 1000) +
+            Math.floor(Math.random() * 1000);
+
+        const saleWithId = {
+            ...sale,
+            id: uniqueSaleId
+        };
+
+        const saleRequest =
+            transaction.objectStore("sales").add(saleWithId);
 
         updatedProducts.forEach(function (product) {
             productStore.put(product);
         });
 
         saleRequest.onsuccess = function () {
-            savedSaleId = saleRequest.result;
+            // The explicit ID is also returned by IndexedDB.
         };
 
         transaction.oncomplete = function () {
-            resolve(savedSaleId);
+            resolve(uniqueSaleId);
         };
 
         transaction.onerror = function () {
