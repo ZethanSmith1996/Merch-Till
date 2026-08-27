@@ -4,6 +4,18 @@ export const supabaseConfig = {
     cloudUsers: {
         master: {
             email: "zethansmith@icloud.com"
+        },
+        lynda: {
+            email: "wglynda1878@outlook.com"
+        },
+        summer: {
+            email: "wgsummer1878@outlook.com"
+        },
+        admin: {
+            email: "wgadmin1878@outlook.com"
+        },
+        staff: {
+            email: "wgstaff1878@outlook.com"
         }
     }
 };
