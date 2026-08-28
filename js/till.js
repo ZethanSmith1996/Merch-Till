@@ -645,7 +645,17 @@ async function completeSale() {
             id: savedSaleId
         });
 
-        document.dispatchEvent(new CustomEvent("sales-changed"));
+        document.dispatchEvent(
+            new CustomEvent("sales-changed", {
+                detail: {
+                    type: "created",
+                    sale: {
+                        ...saleRecord,
+                        id: savedSaleId
+                    }
+                }
+            })
+        );
 
         window.alert(
             "Sale completed successfully.\n\n" +

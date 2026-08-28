@@ -6,6 +6,7 @@ import { getValidCloudAccessToken, isCloudUsername } from "./auth.js";
 import { replaceCloudDataInDatabase, replaceCloudCatalogueInDatabase } from "./database.js";
 
 const CLOUD_DIRTY_KEY = "merchTillCloudDirty";
+const CLOUD_PENDING_SALES_KEY = "merchTillPendingCloudSales";
 let syncTimer = null;
 let syncInProgress = false;
 
@@ -263,6 +264,37 @@ async function syncSessionsSnapshot() {
     await upsertRows("sessions", state.sessions.map(mapSession));
 }
 
+
+async function uploadPendingSalesQueue() {
+    const role = sessionStorage.getItem("merchTillRole") || "";
+    const pendingSales = readPendingSalesQueue();
+
+    for (const sale of pendingSales) {
+        const mappedSale = mapSale(sale);
+
+        if (role === "staff") {
+            // A brand-new Staff transaction is a normal INSERT. Do not send
+            // the entire historic sales cache and do not use upsert/conflict
+            // resolution. This means the request needs only Staff INSERT
+            // permission.
+            await cloudRequest("sales", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                body: JSON.stringify(mappedSale)
+            });
+        } else {
+            // Admin/Master can safely upsert the exact queued transaction.
+            await upsertRows("sales", [mappedSale]);
+        }
+
+        // Only remove a transaction after Supabase has confirmed success.
+        removePendingSale(sale.id);
+    }
+}
+
 async function syncSalesSnapshot() {
     const role = sessionStorage.getItem("merchTillRole") || "";
 
@@ -291,9 +323,61 @@ async function fetchCloudRows(tableName, select = "*") {
     return response.json();
 }
 
+
+function readPendingSalesQueue() {
+    try {
+        const saved = JSON.parse(
+            localStorage.getItem(CLOUD_PENDING_SALES_KEY) || "[]"
+        );
+
+        return Array.isArray(saved) ? saved : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function writePendingSalesQueue(queue) {
+    localStorage.setItem(
+        CLOUD_PENDING_SALES_KEY,
+        JSON.stringify(queue)
+    );
+}
+
+function queuePendingSale(sale) {
+    if (!sale || sale.id === undefined || sale.id === null) {
+        return;
+    }
+
+    const queue = readPendingSalesQueue();
+    const saleId = String(sale.id);
+
+    if (queue.some(function (queuedSale) {
+        return String(queuedSale.id) === saleId;
+    })) {
+        return;
+    }
+
+    queue.push(sale);
+    writePendingSalesQueue(queue);
+}
+
+function removePendingSale(saleId) {
+    const queue = readPendingSalesQueue().filter(function (sale) {
+        return String(sale.id) !== String(saleId);
+    });
+
+    writePendingSalesQueue(queue);
+}
+
 export function hasPendingCloudChanges() {
     const dirty = readDirtyState();
-    return dirty.products || dirty.sessions || dirty.sales;
+
+    return (
+        dirty.products ||
+        dirty.sessions ||
+        dirty.sales ||
+        readPendingSalesQueue().length > 0
+    );
 }
 
 export async function refreshLocalCacheFromCloud() {
@@ -499,10 +583,13 @@ export async function flushPendingCloudSync() {
                 writeDirtyState(dirty);
             }
 
-            if (dirty.sales) {
-                await syncSalesSnapshot();
-                dirty.sales = false;
-                writeDirtyState(dirty);
+            if (dirty.sales || readPendingSalesQueue().length > 0) {
+                await uploadPendingSalesQueue();
+
+                if (readPendingSalesQueue().length === 0) {
+                    dirty.sales = false;
+                    writeDirtyState(dirty);
+                }
             }
         } else {
             // Admin/Master accounts retain the full snapshot synchronisation
@@ -519,10 +606,20 @@ export async function flushPendingCloudSync() {
                 writeDirtyState(dirty);
             }
 
+            if (readPendingSalesQueue().length > 0) {
+                await uploadPendingSalesQueue();
+            }
+
             if (dirty.sales) {
+                // Keep the existing Admin snapshot behaviour for report edits
+                // such as transaction voids. Newly-created transactions have
+                // already been confirmed individually above.
                 await syncSalesSnapshot();
-                dirty.sales = false;
-                writeDirtyState(dirty);
+
+                if (readPendingSalesQueue().length === 0) {
+                    dirty.sales = false;
+                    writeDirtyState(dirty);
+                }
             }
         }
 
@@ -651,8 +748,17 @@ export function initialiseCloudSync() {
         markDirty({ products: true });
     });
 
-    document.addEventListener("sales-changed", function () {
+    document.addEventListener("sales-changed", function (event) {
         updateCloudUploadCounts();
+
+        if (
+            event.detail &&
+            event.detail.type === "created" &&
+            event.detail.sale
+        ) {
+            queuePendingSale(event.detail.sale);
+        }
+
         markDirty({ products: true, sales: true });
     });
 
