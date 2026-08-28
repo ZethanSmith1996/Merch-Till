@@ -535,10 +535,21 @@ export async function flushPendingCloudSync() {
         return true;
     } catch (error) {
         console.warn("Automatic cloud sync is pending:", error);
+
+        const message =
+            error && error.message
+                ? error.message
+                : String(error || "Unknown cloud sync error.");
+
+        // Temporary go-live diagnostic: expose the exact Supabase/PostgREST
+        // failure in the existing Cloud Sync status area so we can identify
+        // the rejected sale field/policy without needing browser developer
+        // tools on the work tablet.
         updateCloudUploadStatus(
-            "Cloud sync pending. Local Till data is safe and sync will retry automatically.",
+            `SYNC ERROR: ${message}`,
             true
         );
+
         return false;
     } finally {
         syncInProgress = false;
