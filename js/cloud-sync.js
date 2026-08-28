@@ -558,8 +558,18 @@ export async function flushPendingCloudSync() {
     }
 
     const dirty = readDirtyState();
+    const hasQueuedSales = readPendingSalesQueue().length > 0;
 
-    if (!dirty.products && !dirty.sessions && !dirty.sales) {
+    // A queued offline sale is pending work even if the older boolean dirty
+    // flags have already been cleared. Previously this early return prevented
+    // the persistent sale queue from ever being retried until another action
+    // (such as an Admin product edit) happened to mark something dirty again.
+    if (
+        !dirty.products &&
+        !dirty.sessions &&
+        !dirty.sales &&
+        !hasQueuedSales
+    ) {
         return true;
     }
 
@@ -577,7 +587,7 @@ export async function flushPendingCloudSync() {
 
             // A Staff sale changes stock. PATCH only the stock fields of
             // existing products rather than upserting/managing the catalogue.
-            if (dirty.products || dirty.sales) {
+            if (dirty.products || dirty.sales || hasQueuedSales) {
                 await syncStaffProductStockSnapshot();
                 dirty.products = false;
                 writeDirtyState(dirty);
