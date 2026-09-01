@@ -36,9 +36,11 @@ function getNextLocalIdFallback() {
     return Math.max(...state.users.map(function (user) { return user.id || 0; })) + 1;
 }
 
-
 function setCloudUserTestStatus(message, isError = false) {
-    if (!dom.cloudUserTestStatus) return;
+    if (!dom.cloudUserTestStatus) {
+        window.alert(message);
+        return;
+    }
 
     dom.cloudUserTestStatus.hidden = false;
     dom.cloudUserTestStatus.textContent = message;
@@ -50,11 +52,14 @@ function setCloudUserTestStatus(message, isError = false) {
 }
 
 async function testCloudUserManagement() {
+    // Immediate visible feedback proves that the click handler is active.
+    setCloudUserTestStatus("Test button received. Preparing secure Master request…");
+
     if (!requireMasterAdmin()) return;
 
     if (!navigator.onLine) {
         setCloudUserTestStatus(
-            "This test needs an internet connection because it calls the Supabase Edge Function.",
+            "TEST FAILED — This test needs an internet connection because it calls the Supabase Edge Function.",
             true
         );
         return;
@@ -65,7 +70,10 @@ async function testCloudUserManagement() {
         "Nothing else in the Till will be changed. Continue?"
     );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+        setCloudUserTestStatus("Test cancelled. No Supabase data was changed.");
+        return;
+    }
 
     const button = dom.testCloudUserManagementButton;
     const originalText = button?.textContent || "Test Cloud User Management";
@@ -111,29 +119,30 @@ async function testCloudUserManagement() {
             }
         );
 
+        const rawText = await response.text();
         let result = null;
         try {
-            result = await response.json();
+            result = rawText ? JSON.parse(rawText) : null;
         } catch (error) {
             result = null;
         }
 
         if (!response.ok || !result?.success) {
             const details = result?.details ? ` (${result.details})` : "";
-            throw new Error(
-                `${result?.error || `Edge Function returned HTTP ${response.status}`}${details}`
-            );
+            const serverMessage = result?.error || rawText || `Edge Function returned HTTP ${response.status}`;
+            throw new Error(`${serverMessage}${details}`);
         }
 
         setCloudUserTestStatus(
-            `SUCCESS — secure Master authorisation worked. Supabase created temporary user "${result.user.username}" (${result.user.email}) with role "${result.user.role}". Check Authentication → Users and public.profiles to confirm both records exist.`
+            `SUCCESS — Supabase created temporary user "${result.user.username}" (${result.user.email}) with role "${result.user.role}". Check Authentication → Users and public.profiles.`
         );
+
+        window.alert(`Cloud user management test succeeded.\n\nCreated: ${result.user.username}`);
     } catch (error) {
         console.error("Cloud user management test failed:", error);
-        setCloudUserTestStatus(
-            `TEST FAILED — ${error instanceof Error ? error.message : "Unknown error."}`,
-            true
-        );
+        const message = error instanceof Error ? error.message : "Unknown error.";
+        setCloudUserTestStatus(`TEST FAILED — ${message}`, true);
+        window.alert(`Cloud user management test failed.\n\n${message}`);
     } finally {
         if (button) {
             button.disabled = false;
@@ -349,10 +358,7 @@ export function initialiseUserManagement() {
     dom.addUserButton.addEventListener("click", openAddUserModal);
 
     if (dom.testCloudUserManagementButton) {
-        dom.testCloudUserManagementButton.addEventListener(
-            "click",
-            testCloudUserManagement
-        );
+        dom.testCloudUserManagementButton.addEventListener("click", testCloudUserManagement);
     }
     dom.closeUserModalButton.addEventListener("click", closeUserModal);
     dom.cancelUserButton.addEventListener("click", closeUserModal);
