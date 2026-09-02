@@ -31,7 +31,7 @@ import {
 import {
     initialiseUserManagement,
     renderUsersTable
-} from "./users.js?v=step1a4";
+} from "./users.js?v=step1a5b";
 import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js";
 
 function refreshProductDisplays() {

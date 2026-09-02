@@ -236,16 +236,55 @@ async function deleteUser(userId) {
     }
 }
 
-async function testManageUsersConnection() {
+async function createCloudTestUser() {
     if (!requireMasterAdmin()) return;
 
-    const button = document.getElementById("test-manage-users-button");
-    const status = document.getElementById("manage-users-test-status");
+    const button = document.getElementById("create-cloud-test-user-button");
+    const status = document.getElementById("cloud-user-test-status");
+    const usernameInput = document.getElementById("cloud-test-username");
+    const emailInput = document.getElementById("cloud-test-email");
+    const passwordInput = document.getElementById("cloud-test-password");
+    const roleInput = document.getElementById("cloud-test-role");
 
-    if (!button || !status) return;
+    if (
+        !button ||
+        !status ||
+        !usernameInput ||
+        !emailInput ||
+        !passwordInput ||
+        !roleInput
+    ) {
+        return;
+    }
+
+    const username = usernameInput.value.trim().toLowerCase();
+    const email = emailInput.value.trim().toLowerCase();
+    const password = passwordInput.value;
+    const role = roleInput.value;
+
+    if (!username) {
+        status.textContent = "ERROR: Enter a username.";
+        return;
+    }
+
+    if (!email) {
+        status.textContent = "ERROR: Enter an email address.";
+        return;
+    }
+
+    if (password.length < 8) {
+        status.textContent = "ERROR: Password must contain at least 8 characters.";
+        return;
+    }
+
+    const confirmed = window.confirm(
+        `Create the real cloud test user "${username}" as ${role}?`
+    );
+
+    if (!confirmed) return;
 
     button.disabled = true;
-    status.textContent = "Testing connection…";
+    status.textContent = "Creating cloud user…";
 
     try {
         const accessToken = await getValidCloudAccessToken();
@@ -265,7 +304,11 @@ async function testManageUsersConnection() {
                     "Authorization": `Bearer ${accessToken}`
                 },
                 body: JSON.stringify({
-                    action: "test-master-auth"
+                    action: "create-user",
+                    username,
+                    email,
+                    password,
+                    role
                 })
             }
         );
@@ -281,6 +324,7 @@ async function testManageUsersConnection() {
 
         if (!response.ok) {
             throw new Error(
+                data?.details ||
                 data?.message ||
                 data?.error ||
                 responseText ||
@@ -290,13 +334,17 @@ async function testManageUsersConnection() {
 
         const message =
             data?.message ||
-            "The Till successfully reached manage-users.";
+            `Cloud user "${username}" created successfully.`;
 
         status.textContent = `SUCCESS: ${message}`;
-        window.alert(`SUCCESS: ${message}`);
+        window.alert(
+            `SUCCESS: ${message}\n\nNow check Supabase Authentication > Users and public.profiles.`
+        );
+
+        passwordInput.value = "";
 
     } catch (error) {
-        console.error("manage-users connection test failed:", error);
+        console.error("Cloud user creation test failed:", error);
         const message = error instanceof Error ? error.message : String(error);
         status.textContent = `ERROR: ${message}`;
         window.alert(`ERROR: ${message}`);
@@ -308,10 +356,11 @@ async function testManageUsersConnection() {
 export function initialiseUserManagement() {
     if (!dom.addUserButton) return;
 
-    const testManageUsersButton = document.getElementById("test-manage-users-button");
+    const createCloudTestUserButton =
+        document.getElementById("create-cloud-test-user-button");
 
-    if (testManageUsersButton) {
-        testManageUsersButton.addEventListener("click", testManageUsersConnection);
+    if (createCloudTestUserButton) {
+        createCloudTestUserButton.addEventListener("click", createCloudTestUser);
     }
 
     dom.addUserButton.addEventListener("click", openAddUserModal);
