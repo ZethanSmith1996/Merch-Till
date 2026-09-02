@@ -353,6 +353,107 @@ async function createCloudTestUser() {
     }
 }
 
+
+async function loadCloudUsersTest() {
+    if (!requireMasterAdmin()) return;
+
+    const button = document.getElementById("load-cloud-users-button");
+    const status = document.getElementById("cloud-user-test-status");
+    const results = document.getElementById("cloud-users-test-results");
+
+    if (!button || !status || !results) return;
+
+    button.disabled = true;
+    status.textContent = "Loading cloud users…";
+    results.style.display = "none";
+    results.innerHTML = "";
+
+    try {
+        const accessToken = await getValidCloudAccessToken();
+
+        if (!accessToken) {
+            throw new Error(
+                "No valid cloud session was found. Log out, log back in as Master while online, then try again."
+            );
+        }
+
+        const response = await fetch(
+            "https://zdxduhnfjebahfzuqttk.supabase.co/functions/v1/manage-users",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({
+                    action: "list-users"
+                })
+            }
+        );
+
+        const responseText = await response.text();
+        let data = null;
+
+        try {
+            data = JSON.parse(responseText);
+        } catch (error) {
+            data = null;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                data?.details ||
+                data?.message ||
+                data?.error ||
+                responseText ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        const cloudUsers = Array.isArray(data?.users) ? data.users : [];
+
+        if (cloudUsers.length === 0) {
+            results.innerHTML = "<p>No cloud users were returned.</p>";
+        } else {
+            const rows = cloudUsers.map((user) => `
+                <tr>
+                    <td>${escapeHtml(user.username || "")}</td>
+                    <td>${escapeHtml(user.email || "")}</td>
+                    <td>${escapeHtml(user.role || "")}</td>
+                    <td>${user.active === true ? "Active" : "Inactive"}</td>
+                </tr>
+            `).join("");
+
+            results.innerHTML = `
+                <table class="products-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        results.style.display = "block";
+        status.textContent =
+            `SUCCESS: Loaded ${cloudUsers.length} cloud user${cloudUsers.length === 1 ? "" : "s"}.`;
+
+    } catch (error) {
+        console.error("Cloud user list test failed:", error);
+        const message = error instanceof Error ? error.message : String(error);
+        status.textContent = `ERROR: ${message}`;
+        window.alert(`ERROR: ${message}`);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+
 export function initialiseUserManagement() {
     if (!dom.addUserButton) return;
 
@@ -361,6 +462,13 @@ export function initialiseUserManagement() {
 
     if (createCloudTestUserButton) {
         createCloudTestUserButton.addEventListener("click", createCloudTestUser);
+    }
+
+    const loadCloudUsersButton =
+        document.getElementById("load-cloud-users-button");
+
+    if (loadCloudUsersButton) {
+        loadCloudUsersButton.addEventListener("click", loadCloudUsersTest);
     }
 
     dom.addUserButton.addEventListener("click", openAddUserModal);
