@@ -354,6 +354,16 @@ async function createCloudTestUser() {
 }
 
 
+
+function escapeCloudUserHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
 async function loadCloudUsersTest() {
     if (!requireMasterAdmin()) return;
 
@@ -417,9 +427,9 @@ async function loadCloudUsersTest() {
         } else {
             const rows = cloudUsers.map((user) => `
                 <tr>
-                    <td>${escapeHtml(user.username || "")}</td>
-                    <td>${escapeHtml(user.email || "")}</td>
-                    <td>${escapeHtml(user.role || "")}</td>
+                    <td>${escapeCloudUserHtml(user.username || "")}</td>
+                    <td>${escapeCloudUserHtml(user.email || "")}</td>
+                    <td>${escapeCloudUserHtml(user.role || "")}</td>
                     <td>${user.active === true ? "Active" : "Inactive"}</td>
                 </tr>
             `).join("");
