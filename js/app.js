@@ -1,4 +1,4 @@
-import { initialiseAuthentication, validateSavedSession, isCloudUsername } from "./auth.js";
+import { initialiseAuthentication, validateSavedSession, isCloudUsername } from "./auth.js?v=step1d2";
 import {
     initialiseProductDatabase,
     initialiseUsersDatabase,

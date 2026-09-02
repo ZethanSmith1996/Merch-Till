@@ -245,92 +245,70 @@ export function showLogin() {
 }
 
 export function isCloudUsername(username) {
-    return Boolean(
-        supabaseConfig.cloudUsers[
-            String(username || "").toLowerCase()
-        ]
-    );
-}
-
-function getCloudUserConfig(username) {
-    return supabaseConfig.cloudUsers[
-        String(username || "").toLowerCase()
-    ] || null;
+    /*
+     * All operational users are now cloud users.
+     * Training remains the deliberate local-only simulation account.
+     */
+    return normaliseCloudUsername(username) !== "training";
 }
 
 async function signInToSupabase(username, password) {
-    const cloudUser = getCloudUserConfig(username);
-
-    if (!cloudUser) {
-        throw new Error("Cloud user is not configured.");
-    }
+    const normalisedUsername =
+        normaliseCloudUsername(username);
 
     const response = await fetch(
-        `${supabaseConfig.url}/auth/v1/token?grant_type=password`,
+        `${supabaseConfig.url}/functions/v1/login-user`,
         {
             method: "POST",
             headers: {
-                "apikey": supabaseConfig.publishableKey,
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                email: cloudUser.email,
-                password: password
+                username: normalisedUsername,
+                password
             })
         }
     );
 
-    if (!response.ok) {
-        if (response.status === 400) {
-            throw new Error("Incorrect username or password.");
-        }
+    const responseText = await response.text();
 
+    let data = null;
+
+    try {
+        data = JSON.parse(responseText);
+    } catch (error) {
+        data = null;
+    }
+
+    if (!response.ok) {
         throw new Error(
-            "Cloud login could not be completed. Check the internet connection."
+            data?.error ||
+            data?.message ||
+            responseText ||
+            "Cloud login could not be completed."
         );
     }
-
-    const authData = await response.json();
-
-    if (!authData.access_token || !authData.user?.id) {
-        throw new Error("Supabase did not return a valid login session.");
-    }
-
-    const profileResponse = await fetch(
-        `${supabaseConfig.url}/rest/v1/profiles` +
-        `?id=eq.${encodeURIComponent(authData.user.id)}` +
-        `&select=username,role,active`,
-        {
-            headers: {
-                "apikey": supabaseConfig.publishableKey,
-                "Authorization": `Bearer ${authData.access_token}`,
-                "Accept": "application/json"
-            }
-        }
-    );
-
-    if (!profileResponse.ok) {
-        throw new Error("Your cloud profile could not be loaded.");
-    }
-
-    const profiles = await profileResponse.json();
-    const profile = profiles[0];
 
     if (
-        !profile ||
-        !profile.active ||
-        profile.username.toLowerCase() !== username.toLowerCase()
+        !data?.success ||
+        !data?.session?.access_token ||
+        !data?.session?.refresh_token ||
+        !data?.user?.username ||
+        !data?.user?.role
     ) {
         throw new Error(
-            "This cloud account is not authorised for this Till login."
+            "Supabase did not return a valid Till login session."
         );
     }
 
-    saveCloudSession(authData, username);
+    saveCloudSession(
+        data.session,
+        data.user.username
+    );
 
     return {
-        username: profile.username,
-        role: profile.role
+        username: data.user.username,
+        role: data.user.role
     };
 }
 
@@ -449,48 +427,81 @@ export function initialiseAuthentication() {
 
         dom.errorMessage.textContent = "";
 
-        if (isCloudUsername(enteredUsername)) {
-            try {
-                const cloudProfile = await signInToSupabase(
-                    enteredUsername,
-                    enteredPassword
-                );
+        if (normaliseCloudUsername(enteredUsername) === "training") {
+            const matchingTrainingUser =
+                state.users.find(function (user) {
+                    return (
+                        user.active &&
+                        normaliseCloudUsername(user.username) === "training" &&
+                        user.password === enteredPassword
+                    );
+                });
 
+            if (matchingTrainingUser) {
                 sessionStorage.setItem("merchTillLoggedIn", "true");
-                sessionStorage.setItem("merchTillUsername", cloudProfile.username);
-                sessionStorage.setItem("merchTillRole", cloudProfile.role);
-                showApplication(cloudProfile.username);
-                document.dispatchEvent(
-                    new CustomEvent("cloud-authenticated")
+                sessionStorage.setItem(
+                    "merchTillUsername",
+                    matchingTrainingUser.username
                 );
-                return;
-            } catch (error) {
-                console.error("Cloud login failed:", error);
-                dom.errorMessage.textContent =
-                    error.message || "Incorrect username or password.";
-                document.getElementById("password").value = "";
+                sessionStorage.setItem(
+                    "merchTillRole",
+                    matchingTrainingUser.role
+                );
+                showApplication(
+                    matchingTrainingUser.username
+                );
                 return;
             }
-        }
 
-        const matchingUser = state.users.find(function (user) {
-            return (
-                user.active &&
-                user.username === enteredUsername &&
-                user.password === enteredPassword
-            );
-        });
-
-        if (matchingUser) {
-            sessionStorage.setItem("merchTillLoggedIn", "true");
-            sessionStorage.setItem("merchTillUsername", matchingUser.username);
-            sessionStorage.setItem("merchTillRole", matchingUser.role);
-            showApplication(matchingUser.username);
+            dom.errorMessage.textContent =
+                "Incorrect username or password.";
+            document.getElementById("password").value = "";
             return;
         }
 
-        dom.errorMessage.textContent = "Incorrect username or password.";
-        document.getElementById("password").value = "";
+        if (!navigator.onLine) {
+            dom.errorMessage.textContent =
+                "Cloud login requires an internet connection. Reconnect and try again.";
+            document.getElementById("password").value = "";
+            return;
+        }
+
+        try {
+            const cloudProfile = await signInToSupabase(
+                enteredUsername,
+                enteredPassword
+            );
+
+            sessionStorage.setItem("merchTillLoggedIn", "true");
+            sessionStorage.setItem(
+                "merchTillUsername",
+                cloudProfile.username
+            );
+            sessionStorage.setItem(
+                "merchTillRole",
+                cloudProfile.role
+            );
+
+            showApplication(
+                cloudProfile.username
+            );
+
+            document.dispatchEvent(
+                new CustomEvent("cloud-authenticated")
+            );
+
+            return;
+
+        } catch (error) {
+            console.error("Cloud login failed:", error);
+
+            dom.errorMessage.textContent =
+                error.message ||
+                "Incorrect username or password.";
+
+            document.getElementById("password").value = "";
+            return;
+        }
     });
 
     dom.logoutButton.addEventListener("click", function () {
