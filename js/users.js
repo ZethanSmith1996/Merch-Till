@@ -8,6 +8,7 @@ import {
 } from "./database.js";
 import { canManageUsers } from "./permissions.js";
 import { escapeHTML } from "./utils.js";
+import { getValidCloudAccessToken } from "./auth.js";
 
 const roleLabels = {
     "master-admin": "Master Admin",
@@ -247,15 +248,24 @@ async function testManageUsersConnection() {
     status.textContent = "Testing connection…";
 
     try {
+        const accessToken = await getValidCloudAccessToken();
+
+        if (!accessToken) {
+            throw new Error(
+                "No valid cloud session was found. Log out, log back in as Master while online, then try again."
+            );
+        }
+
         const response = await fetch(
             "https://zdxduhnfjebahfzuqttk.supabase.co/functions/v1/manage-users",
             {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${accessToken}`
                 },
                 body: JSON.stringify({
-                    test: "github-pages-post"
+                    action: "test-master-auth"
                 })
             }
         );
