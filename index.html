@@ -649,98 +649,38 @@
                             <h2>Users</h2>
 
                             <p>
-                                Create and manage access to Merch Till.
+                                Cloud user management. An internet connection is required to view
+                                or manage users.
                             </p>
                         </div>
 
-                        <button
-                            type="button"
-                            id="add-user-button"
-                            class="add-product-button"
-                        >
-                            + Add User
-                        </button>
+                        <div class="product-actions">
+                            <button
+                                type="button"
+                                id="refresh-cloud-users-button"
+                            >
+                                Refresh Users
+                            </button>
 
-                    </div>
-
-
-                    <div class="products-table-container" style="margin-bottom: 1rem;">
-                        <div style="padding: 1rem;">
-                            <h3 style="margin-top: 0;">Cloud User Creation Test</h3>
-                            <p>
-                                Temporary Step 1A.5 test. This creates a real Supabase Auth user
-                                and matching Till profile. Master Admin only.
-                            </p>
-
-                            <div style="display: grid; gap: 0.75rem; max-width: 34rem;">
-                                <label>
-                                    <span>Username</span>
-                                    <input
-                                        type="text"
-                                        id="cloud-test-username"
-                                        autocomplete="off"
-                                        placeholder="e.g. cloudtest1"
-                                    >
-                                </label>
-
-                                <label>
-                                    <span>Email</span>
-                                    <input
-                                        type="email"
-                                        id="cloud-test-email"
-                                        autocomplete="off"
-                                        placeholder="e.g. cloudtest1@example.com"
-                                    >
-                                </label>
-
-                                <label>
-                                    <span>Password</span>
-                                    <input
-                                        type="password"
-                                        id="cloud-test-password"
-                                        autocomplete="new-password"
-                                        placeholder="Minimum 8 characters"
-                                    >
-                                </label>
-
-                                <label>
-                                    <span>Role</span>
-                                    <select id="cloud-test-role">
-                                        <option value="staff">Staff</option>
-                                        <option value="admin">Admin</option>
-                                    </select>
-                                </label>
-
-                                <button
-                                    type="button"
-                                    id="create-cloud-test-user-button"
-                                    class="add-product-button"
-                                >
-                                    Create Test Cloud User
-                                </button>
-
-                                <button
-                                    type="button"
-                                    id="load-cloud-users-button"
-                                    class="add-product-button"
-                                >
-                                    Load Cloud Users
-                                </button>
-
-                                <div
-                                    id="cloud-users-test-results"
-                                    style="display: none; overflow-x: auto;"
-                                ></div>
-
-                                <p
-                                    id="cloud-user-test-status"
-                                    aria-live="polite"
-                                    style="margin-bottom: 0;"
-                                ></p>
-                            </div>
+                            <button
+                                type="button"
+                                id="add-user-button"
+                                class="add-product-button"
+                                disabled
+                                title="Cloud Add User will be connected in the next step."
+                            >
+                                + Add User
+                            </button>
                         </div>
+
                     </div>
 
+                    <p
+                        id="cloud-users-status"
+                        aria-live="polite"
+                    >
+                        Loading cloud users…
+                    </p>
 
                     <div class="products-table-container">
 
@@ -749,6 +689,7 @@
                             <thead>
                                 <tr>
                                     <th>Username</th>
+                                    <th>Email</th>
                                     <th>Role</th>
                                     <th>Status</th>
                                     <th>Actions</th>
@@ -756,7 +697,7 @@
                             </thead>
 
                             <tbody id="users-table-body">
-                                <!-- Users are added by JavaScript -->
+                                <!-- Cloud users are added by JavaScript -->
                             </tbody>
 
                         </table>
@@ -766,7 +707,7 @@
                             class="no-products-message"
                             hidden
                         >
-                            No users have been created.
+                            No cloud users were returned.
                         </div>
 
                     </div>
