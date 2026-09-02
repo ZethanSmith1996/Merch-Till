@@ -235,8 +235,74 @@ async function deleteUser(userId) {
     }
 }
 
+async function testManageUsersConnection() {
+    if (!requireMasterAdmin()) return;
+
+    const button = document.getElementById("test-manage-users-button");
+    const status = document.getElementById("manage-users-test-status");
+
+    if (!button || !status) return;
+
+    button.disabled = true;
+    status.textContent = "Testing connection…";
+
+    try {
+        const response = await fetch(
+            "https://zdxduhnfjebahfzuqttk.supabase.co/functions/v1/manage-users",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    test: "github-pages-post"
+                })
+            }
+        );
+
+        const responseText = await response.text();
+        let data = null;
+
+        try {
+            data = JSON.parse(responseText);
+        } catch (error) {
+            data = null;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                data?.message ||
+                data?.error ||
+                responseText ||
+                `HTTP ${response.status}`
+            );
+        }
+
+        const message =
+            data?.message ||
+            "The Till successfully reached manage-users.";
+
+        status.textContent = `SUCCESS: ${message}`;
+        window.alert(`SUCCESS: ${message}`);
+
+    } catch (error) {
+        console.error("manage-users connection test failed:", error);
+        const message = error instanceof Error ? error.message : String(error);
+        status.textContent = `ERROR: ${message}`;
+        window.alert(`ERROR: ${message}`);
+    } finally {
+        button.disabled = false;
+    }
+}
+
 export function initialiseUserManagement() {
     if (!dom.addUserButton) return;
+
+    const testManageUsersButton = document.getElementById("test-manage-users-button");
+
+    if (testManageUsersButton) {
+        testManageUsersButton.addEventListener("click", testManageUsersConnection);
+    }
 
     dom.addUserButton.addEventListener("click", openAddUserModal);
     dom.closeUserModalButton.addEventListener("click", closeUserModal);
