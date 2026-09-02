@@ -41,6 +41,22 @@ function renderCloudUsers() {
                 ? "Active"
                 : "Disabled";
 
+        const isMaster =
+            user.role === "master-admin";
+
+        const actionMarkup = isMaster
+            ? `<span>Protected</span>`
+            : `
+                <button
+                    type="button"
+                    class="user-status-button"
+                    data-user-id="${escapeHTML(user.id || "")}"
+                    data-user-active="${user.active === true ? "true" : "false"}"
+                >
+                    ${user.active === true ? "Disable" : "Enable"}
+                </button>
+            `;
+
         row.innerHTML = `
             <td>
                 <strong>${escapeHTML(user.username || "")}</strong>
@@ -48,9 +64,7 @@ function renderCloudUsers() {
             <td>${escapeHTML(user.email || "")}</td>
             <td>${role}</td>
             <td>${status}</td>
-            <td>
-                <span>Cloud managed</span>
-            </td>
+            <td>${actionMarkup}</td>
         `;
 
         dom.usersTableBody.appendChild(row);
@@ -341,6 +355,82 @@ async function submitCloudUser(event) {
     }
 }
 
+
+async function changeCloudUserStatus(userId, currentlyActive) {
+    if (!canManageUsers()) return;
+
+    const targetUser =
+        cloudUsers.find(
+            (user) => user.id === userId
+        );
+
+    if (!targetUser) {
+        setUsersStatus(
+            "Users unavailable: The selected user could not be found."
+        );
+        return;
+    }
+
+    if (targetUser.role === "master-admin") {
+        setUsersStatus(
+            "The Master Admin account is protected and cannot be disabled."
+        );
+        return;
+    }
+
+    const action =
+        currentlyActive
+            ? "disable-user"
+            : "enable-user";
+
+    const verb =
+        currentlyActive
+            ? "disable"
+            : "enable";
+
+    const confirmed = window.confirm(
+        `Are you sure you want to ${verb} "${targetUser.username}"?`
+    );
+
+    if (!confirmed) return;
+
+    setUsersStatus(
+        `${currentlyActive ? "Disabling" : "Enabling"} ${targetUser.username}…`
+    );
+
+    try {
+        const data =
+            await callManageUsers(
+                action,
+                {
+                    userId
+                }
+            );
+
+        setUsersStatus(
+            data?.message ||
+            `User "${targetUser.username}" updated successfully.`
+        );
+
+        await fetchCloudUsers();
+
+    } catch (error) {
+        console.error(
+            "Cloud user status could not be changed:",
+            error
+        );
+
+        const message =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+        setUsersStatus(
+            `User status update failed: ${message}`
+        );
+    }
+}
+
 export function renderUsersTable() {
     return fetchCloudUsers();
 }
@@ -355,6 +445,31 @@ export function initialiseUserManagement() {
         refreshButton.addEventListener(
             "click",
             fetchCloudUsers
+        );
+    }
+
+    if (dom.usersTableBody) {
+        dom.usersTableBody.addEventListener(
+            "click",
+            function (event) {
+                const button =
+                    event.target.closest(
+                        ".user-status-button"
+                    );
+
+                if (!button) return;
+
+                const userId =
+                    button.dataset.userId;
+
+                const currentlyActive =
+                    button.dataset.userActive === "true";
+
+                changeCloudUserStatus(
+                    userId,
+                    currentlyActive
+                );
+            }
         );
     }
 
