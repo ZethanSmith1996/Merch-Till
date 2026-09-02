@@ -32,10 +32,6 @@ function renderCloudUsers() {
     cloudUsers.forEach(function (user) {
         const row = document.createElement("tr");
 
-        const role =
-            roleLabels[user.role] ||
-            escapeHTML(user.role || "");
-
         const status =
             user.active === true
                 ? "Active"
@@ -44,7 +40,25 @@ function renderCloudUsers() {
         const isMaster =
             user.role === "master-admin";
 
-        const actionMarkup = isMaster
+        const roleMarkup = isMaster
+            ? `<span>${roleLabels["master-admin"]}</span>`
+            : `
+                <select
+                    class="user-role-select"
+                    data-user-id="${escapeHTML(user.id || "")}"
+                    data-current-role="${escapeHTML(user.role || "")}"
+                    aria-label="Role for ${escapeHTML(user.username || "")}"
+                >
+                    <option value="staff" ${user.role === "staff" ? "selected" : ""}>
+                        Staff
+                    </option>
+                    <option value="admin" ${user.role === "admin" ? "selected" : ""}>
+                        Admin
+                    </option>
+                </select>
+            `;
+
+        const statusActionMarkup = isMaster
             ? `<span>Protected</span>`
             : `
                 <button
@@ -62,9 +76,9 @@ function renderCloudUsers() {
                 <strong>${escapeHTML(user.username || "")}</strong>
             </td>
             <td>${escapeHTML(user.email || "")}</td>
-            <td>${role}</td>
+            <td>${roleMarkup}</td>
             <td>${status}</td>
-            <td>${actionMarkup}</td>
+            <td>${statusActionMarkup}</td>
         `;
 
         dom.usersTableBody.appendChild(row);
@@ -356,6 +370,102 @@ async function submitCloudUser(event) {
 }
 
 
+
+async function changeCloudUserRole(userId, newRole, selectElement) {
+    if (!canManageUsers()) return;
+
+    const targetUser =
+        cloudUsers.find(
+            (user) => user.id === userId
+        );
+
+    if (!targetUser) {
+        setUsersStatus(
+            "Users unavailable: The selected user could not be found."
+        );
+        return;
+    }
+
+    if (targetUser.role === "master-admin") {
+        setUsersStatus(
+            "The Master Admin role is protected and cannot be changed."
+        );
+        return;
+    }
+
+    const oldRole = targetUser.role;
+
+    if (oldRole === newRole) {
+        return;
+    }
+
+    const oldLabel =
+        roleLabels[oldRole] || oldRole;
+
+    const newLabel =
+        roleLabels[newRole] || newRole;
+
+    const confirmed = window.confirm(
+        `Change "${targetUser.username}" from ${oldLabel} to ${newLabel}?`
+    );
+
+    if (!confirmed) {
+        if (selectElement) {
+            selectElement.value = oldRole;
+        }
+        return;
+    }
+
+    if (selectElement) {
+        selectElement.disabled = true;
+    }
+
+    setUsersStatus(
+        `Changing ${targetUser.username} to ${newLabel}…`
+    );
+
+    try {
+        const data =
+            await callManageUsers(
+                "change-role",
+                {
+                    userId,
+                    role: newRole
+                }
+            );
+
+        setUsersStatus(
+            data?.message ||
+            `User "${targetUser.username}" changed to ${newLabel}.`
+        );
+
+        await fetchCloudUsers();
+
+    } catch (error) {
+        console.error(
+            "Cloud user role could not be changed:",
+            error
+        );
+
+        if (selectElement) {
+            selectElement.value = oldRole;
+        }
+
+        const message =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+        setUsersStatus(
+            `Role update failed: ${message}`
+        );
+    } finally {
+        if (selectElement) {
+            selectElement.disabled = false;
+        }
+    }
+}
+
 async function changeCloudUserStatus(userId, currentlyActive) {
     if (!canManageUsers()) return;
 
@@ -468,6 +578,26 @@ export function initialiseUserManagement() {
                 changeCloudUserStatus(
                     userId,
                     currentlyActive
+                );
+            }
+        );
+    }
+
+    if (dom.usersTableBody) {
+        dom.usersTableBody.addEventListener(
+            "change",
+            function (event) {
+                const select =
+                    event.target.closest(
+                        ".user-role-select"
+                    );
+
+                if (!select) return;
+
+                changeCloudUserRole(
+                    select.dataset.userId,
+                    select.value,
+                    select
                 );
             }
         );
