@@ -16,8 +16,6 @@ export const dom = {
     usersTableBody: document.getElementById("users-table-body"),
     noUsersMessage: document.getElementById("no-users-message"),
     addUserButton: document.getElementById("add-user-button"),
-    testCloudUserManagementButton: document.getElementById("test-cloud-user-management-button"),
-    cloudUserTestStatus: document.getElementById("cloud-user-test-status"),
     userModal: document.getElementById("user-modal"),
     userModalTitle: document.getElementById("user-modal-title"),
     userForm: document.getElementById("user-form"),

@@ -8,8 +8,6 @@ import {
 } from "./database.js";
 import { canManageUsers } from "./permissions.js";
 import { escapeHTML } from "./utils.js";
-import { getValidCloudAccessToken } from "./auth.js";
-import { supabaseConfig } from "./config.js";
 
 const roleLabels = {
     "master-admin": "Master Admin",
@@ -34,121 +32,6 @@ function currentUsername() {
 function getNextLocalIdFallback() {
     if (state.users.length === 0) return 1;
     return Math.max(...state.users.map(function (user) { return user.id || 0; })) + 1;
-}
-
-function setCloudUserTestStatus(message, isError = false) {
-    if (!dom.cloudUserTestStatus) {
-        window.alert(message);
-        return;
-    }
-
-    dom.cloudUserTestStatus.hidden = false;
-    dom.cloudUserTestStatus.textContent = message;
-    dom.cloudUserTestStatus.style.color = isError ? "#991b1b" : "#1f2937";
-    dom.cloudUserTestStatus.style.background = isError ? "#fee2e2" : "#eef2ff";
-    dom.cloudUserTestStatus.style.border = isError ? "1px solid #fecaca" : "1px solid #c7d2fe";
-    dom.cloudUserTestStatus.style.padding = "12px 14px";
-    dom.cloudUserTestStatus.style.borderRadius = "10px";
-}
-
-async function testCloudUserManagement() {
-    // Immediate visible feedback proves that the click handler is active.
-    setCloudUserTestStatus("Test button received. Preparing secure Master request…");
-
-    if (!requireMasterAdmin()) return;
-
-    if (!navigator.onLine) {
-        setCloudUserTestStatus(
-            "TEST FAILED — This test needs an internet connection because it calls the Supabase Edge Function.",
-            true
-        );
-        return;
-    }
-
-    const confirmed = window.confirm(
-        "This test will create one temporary Staff account in Supabase Auth and public.profiles.\n\n" +
-        "Nothing else in the Till will be changed. Continue?"
-    );
-
-    if (!confirmed) {
-        setCloudUserTestStatus("Test cancelled. No Supabase data was changed.");
-        return;
-    }
-
-    const button = dom.testCloudUserManagementButton;
-    const originalText = button?.textContent || "Test Cloud User Management";
-
-    try {
-        if (button) {
-            button.disabled = true;
-            button.textContent = "Testing…";
-        }
-
-        setCloudUserTestStatus("Checking the current Master cloud session…");
-
-        const accessToken = await getValidCloudAccessToken();
-
-        if (!accessToken) {
-            throw new Error(
-                "No valid Master Supabase session is available. Log out, log back in as master while online, then try again."
-            );
-        }
-
-        const uniqueSuffix = Date.now().toString().slice(-10);
-        const username = `cloudtest${uniqueSuffix}`;
-        const email = `${username}@example.com`;
-
-        setCloudUserTestStatus("Calling the secure manage-users Edge Function…");
-
-        const response = await fetch(
-            `${supabaseConfig.url}/functions/v1/manage-users`,
-            {
-                method: "POST",
-                headers: {
-                    "apikey": supabaseConfig.publishableKey,
-                    "Authorization": `Bearer ${accessToken}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    action: "create-user",
-                    username,
-                    email,
-                    password: `TempTest${uniqueSuffix}!`,
-                    role: "staff"
-                })
-            }
-        );
-
-        const rawText = await response.text();
-        let result = null;
-        try {
-            result = rawText ? JSON.parse(rawText) : null;
-        } catch (error) {
-            result = null;
-        }
-
-        if (!response.ok || !result?.success) {
-            const details = result?.details ? ` (${result.details})` : "";
-            const serverMessage = result?.error || rawText || `Edge Function returned HTTP ${response.status}`;
-            throw new Error(`${serverMessage}${details}`);
-        }
-
-        setCloudUserTestStatus(
-            `SUCCESS — Supabase created temporary user "${result.user.username}" (${result.user.email}) with role "${result.user.role}". Check Authentication → Users and public.profiles.`
-        );
-
-        window.alert(`Cloud user management test succeeded.\n\nCreated: ${result.user.username}`);
-    } catch (error) {
-        console.error("Cloud user management test failed:", error);
-        const message = error instanceof Error ? error.message : "Unknown error.";
-        setCloudUserTestStatus(`TEST FAILED — ${message}`, true);
-        window.alert(`Cloud user management test failed.\n\n${message}`);
-    } finally {
-        if (button) {
-            button.disabled = false;
-            button.textContent = originalText;
-        }
-    }
 }
 
 export function renderUsersTable() {
@@ -356,10 +239,6 @@ export function initialiseUserManagement() {
     if (!dom.addUserButton) return;
 
     dom.addUserButton.addEventListener("click", openAddUserModal);
-
-    if (dom.testCloudUserManagementButton) {
-        dom.testCloudUserManagementButton.addEventListener("click", testCloudUserManagement);
-    }
     dom.closeUserModalButton.addEventListener("click", closeUserModal);
     dom.cancelUserButton.addEventListener("click", closeUserModal);
     dom.userForm.addEventListener("submit", saveUser);
