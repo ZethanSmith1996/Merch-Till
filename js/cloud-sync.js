@@ -602,10 +602,10 @@ export async function flushPendingCloudSync() {
                 }
             }
         } else {
-            // Admin/Master accounts retain the full snapshot synchronisation
-            // behaviour used for product management, sessions and reports.
-            if (dirty.sessions || dirty.sales) {
-                await syncSessionsSnapshot();
+            // Session management is now cloud-first. Never upload an old
+            // local session snapshot over Supabase. A leftover legacy dirty
+            // flag is discarded and the normal cloud refresh restores cache.
+            if (dirty.sessions) {
                 dirty.sessions = false;
                 writeDirtyState(dirty);
             }
@@ -789,8 +789,16 @@ export function initialiseCloudSync() {
         markDirty({ products: true, sales: true });
     });
 
-    document.addEventListener("sessions-changed", function () {
+    document.addEventListener("sessions-changed", function (event) {
         updateCloudUploadCounts();
+
+        if (
+            event.detail &&
+            event.detail.cloudConfirmed === true
+        ) {
+            return;
+        }
+
         markDirty({ sessions: true });
     });
 

@@ -1,8 +1,170 @@
 import { state } from './state.js';
 import { dom } from './dom.js';
-import { createSessionInDatabase, closeSessionInDatabase } from './database.js';
+import { replaceSessionCacheInDatabase } from "./database.js?v=step3c";
 import { clearCart, refreshTillAvailability } from './till.js';
-import { canManageSessions, isTrainingUser} from "./permissions.js";
+import { canManageSessions, isTrainingUser } from "./permissions.js";
+import { getValidCloudAccessToken } from "./auth.js?v=step3c";
+import { supabaseConfig } from "./config.js?v=step3c";
+
+
+function setSessionCloudStatus(message, isError = false) {
+    const status = document.getElementById("session-cloud-status");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("cloud-upload-error", isError);
+}
+
+async function sessionCloudRequest(path, options = {}) {
+    if (!navigator.onLine) {
+        throw new Error(
+            "Trading-session management requires an internet connection."
+        );
+    }
+
+    const accessToken = await getValidCloudAccessToken();
+
+    if (!accessToken) {
+        throw new Error(
+            "No valid cloud session is available. Log out and log back in while online."
+        );
+    }
+
+    const response = await fetch(
+        `${supabaseConfig.url}/rest/v1/${path}`,
+        {
+            ...options,
+            headers: {
+                "apikey": supabaseConfig.publishableKey,
+                "Authorization": `Bearer ${accessToken}`,
+                ...(options.headers || {})
+            }
+        }
+    );
+
+    if (!response.ok) {
+        const details = await response.text();
+        throw new Error(
+            `Cloud session request failed (${response.status}). ${details}`
+        );
+    }
+
+    return response;
+}
+
+function mapSessionForCloud(session) {
+    return {
+        id: session.id,
+        opened_at: session.openedAt,
+        closed_at: session.closedAt || null,
+        opened_by: session.openedBy || null,
+        closed_by: session.closedBy || null,
+        status: session.status || (session.closedAt ? "closed" : "open"),
+        cloud_updated_at: new Date().toISOString()
+    };
+}
+
+function unmapCloudSession(row) {
+    return {
+        id: Number(row.id),
+        openedAt: row.opened_at,
+        closedAt: row.closed_at || null,
+        openedBy: row.opened_by || null,
+        closedBy: row.closed_by || null,
+        status: row.status || (row.closed_at ? "closed" : "open")
+    };
+}
+
+function createUniqueSessionId() {
+    return (
+        Date.now() * 1000 +
+        Math.floor(Math.random() * 1000)
+    );
+}
+
+async function fetchAuthoritativeCloudSessions() {
+    const response = await sessionCloudRequest(
+        "sessions?select=*&order=opened_at.desc",
+        {
+            method: "GET",
+            headers: { "Accept": "application/json" }
+        }
+    );
+
+    const rows = await response.json();
+
+    return rows.map(unmapCloudSession).sort(function (first, second) {
+        return second.openedAt.localeCompare(first.openedAt);
+    });
+}
+
+async function refreshSessionCacheFromCloud() {
+    const sessions = await fetchAuthoritativeCloudSessions();
+
+    await replaceSessionCacheInDatabase(sessions);
+
+    state.sessions = sessions;
+    state.currentSession =
+        sessions.find(function (session) {
+            return session.status === "open";
+        }) || null;
+
+    document.dispatchEvent(
+        new CustomEvent("sessions-changed", {
+            detail: { cloudConfirmed: true }
+        })
+    );
+
+    setSessionCloudStatus(
+        "Trading sessions are synced with Supabase."
+    );
+
+    renderSessionStatus();
+    return sessions;
+}
+
+function requireOnlineSessionManagement() {
+    if (navigator.onLine) return true;
+
+    setSessionCloudStatus(
+        "Session management is unavailable offline. An already-open session can continue selling from the cached session.",
+        true
+    );
+
+    window.alert(
+        "Starting or cashing off a trading session requires an internet connection.\n\n" +
+        "If a session was already open before connection was lost, sales can continue using the cached session."
+    );
+
+    return false;
+}
+
+function updateSessionManagementAvailability() {
+    const offline = !navigator.onLine;
+
+    if (dom.startSessionButton) {
+        dom.startSessionButton.disabled =
+            canManageSessions() && offline;
+    }
+
+    if (dom.cashOffSessionButton) {
+        dom.cashOffSessionButton.disabled =
+            canManageSessions() && offline;
+    }
+
+    if (offline) {
+        setSessionCloudStatus(
+            "Session management is unavailable offline. An already-open session can continue selling from the cached session.",
+            true
+        );
+    } else {
+        setSessionCloudStatus(
+            "Session management is online. Supabase is the source of truth."
+        );
+    }
+
+    renderSessionStatus();
+}
+
 
 function username() {
     return sessionStorage.getItem('merchTillUsername') || 'Unknown';
@@ -113,55 +275,77 @@ async function startSession() {
         window.alert(
             "Only an administrator can start a trading session."
         );
-
         return;
     }
 
-    if (state.currentSession) {
+    if (!requireOnlineSessionManagement()) {
         return;
     }
-
-    const now = new Date().toISOString();
-
-    const session = {
-        openedAt: now,
-        closedAt: null,
-        openedBy: username(),
-        closedBy: null,
-        status: "open"
-    };
 
     try {
-        const id =
-            await createSessionInDatabase(session);
+        const authoritativeSessions =
+            await fetchAuthoritativeCloudSessions();
 
-        state.currentSession = {
-            ...session,
-            id
+        const existingOpenSession =
+            authoritativeSessions.find(function (session) {
+                return session.status === "open";
+            });
+
+        if (existingOpenSession) {
+            await replaceSessionCacheInDatabase(authoritativeSessions);
+            state.sessions = authoritativeSessions;
+            state.currentSession = existingOpenSession;
+            renderSessionStatus();
+
+            window.alert(
+                "A trading session is already open in Supabase."
+            );
+            return;
+        }
+
+        const session = {
+            id: createUniqueSessionId(),
+            openedAt: new Date().toISOString(),
+            closedAt: null,
+            openedBy: username(),
+            closedBy: null,
+            status: "open"
         };
 
-        state.sessions.unshift(
-            state.currentSession
+        setSessionCloudStatus(
+            "Starting trading session in Supabase…"
+        );
+
+        await sessionCloudRequest(
+            "sessions",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                body: JSON.stringify(
+                    mapSessionForCloud(session)
+                )
+            }
         );
 
         state.currentOrderNumber = 1;
-
         dom.orderNumberDisplay.textContent = "1";
 
-        renderSessionStatus();
-
-        document.dispatchEvent(
-            new CustomEvent("sessions-changed")
-        );
+        await refreshSessionCacheFromCloud();
 
     } catch (error) {
-        console.error(
-            "Session could not be started:",
-            error
+        console.error("Session could not be started:", error);
+
+        setSessionCloudStatus(
+            `Session start failed: ${error.message || error}`,
+            true
         );
 
         window.alert(
-            "The trading session could not be started."
+            "The trading session could not be started.\n\n" +
+            (error.message || error)
         );
     }
 }
@@ -171,7 +355,6 @@ async function cashOffSession() {
         window.alert(
             "Only an administrator can cash off a trading session."
         );
-
         return;
     }
 
@@ -179,10 +362,15 @@ async function cashOffSession() {
         return;
     }
 
+    if (!requireOnlineSessionManagement()) {
+        return;
+    }
+
     const sessionSales =
         state.sales.filter(function (sale) {
             return (
-                String(sale.sessionId) === String(state.currentSession.id) &&
+                String(sale.sessionId) ===
+                    String(state.currentSession.id) &&
                 !sale.voided
             );
         });
@@ -206,57 +394,78 @@ async function cashOffSession() {
             "Products and stock will not reset."
         );
 
-    if (!shouldCashOff) {
-        return;
-    }
-
-    const closedAt =
-        new Date().toISOString();
-
-    const closedSession = {
-        ...state.currentSession,
-        closedAt: closedAt,
-        closedBy: username(),
-        status: "closed"
-    };
+    if (!shouldCashOff) return;
 
     try {
-        await closeSessionInDatabase(
-            closedSession
-        );
+        const authoritativeSessions =
+            await fetchAuthoritativeCloudSessions();
 
-        const index =
-            state.sessions.findIndex(
-                function (session) {
-                    return (
-                        session.id ===
-                        closedSession.id
-                    );
-                }
+        const cloudSession =
+            authoritativeSessions.find(function (session) {
+                return (
+                    String(session.id) ===
+                    String(state.currentSession.id)
+                );
+            });
+
+        if (!cloudSession) {
+            throw new Error(
+                "The current session could not be found in Supabase."
             );
-
-        if (index >= 0) {
-            state.sessions[index] =
-                closedSession;
         }
 
-        state.currentSession = null;
+        if (cloudSession.status !== "open") {
+            await replaceSessionCacheInDatabase(authoritativeSessions);
+            state.sessions = authoritativeSessions;
+            state.currentSession =
+                authoritativeSessions.find(function (session) {
+                    return session.status === "open";
+                }) || null;
 
-        clearCart();
-        renderSessionStatus();
+            clearCart();
+            renderSessionStatus();
 
-        document.dispatchEvent(
-            new CustomEvent("sessions-changed")
+            window.alert(
+                "This trading session had already been closed on another device."
+            );
+            return;
+        }
+
+        setSessionCloudStatus(
+            "Cashing off trading session in Supabase…"
         );
 
+        await sessionCloudRequest(
+            `sessions?id=eq.${encodeURIComponent(cloudSession.id)}`,
+            {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                body: JSON.stringify({
+                    closed_at: new Date().toISOString(),
+                    closed_by: username(),
+                    status: "closed",
+                    cloud_updated_at: new Date().toISOString()
+                })
+            }
+        );
+
+        clearCart();
+        await refreshSessionCacheFromCloud();
+
     } catch (error) {
-        console.error(
-            "Session could not be cashed off:",
-            error
+        console.error("Session could not be cashed off:", error);
+
+        setSessionCloudStatus(
+            `Cash off failed: ${error.message || error}`,
+            true
         );
 
         window.alert(
-            "The session could not be cashed off."
+            "The session could not be cashed off.\n\n" +
+            (error.message || error)
         );
     }
 }
@@ -285,7 +494,30 @@ export function restoreCurrentOrderNumber() {
 }
 
 export function initialiseSessions() {
-    dom.startSessionButton.addEventListener('click', startSession);
-    dom.cashOffSessionButton.addEventListener('click', cashOffSession);
-    renderSessionStatus();
+    dom.startSessionButton.addEventListener(
+        "click",
+        startSession
+    );
+
+    dom.cashOffSessionButton.addEventListener(
+        "click",
+        cashOffSession
+    );
+
+    window.addEventListener(
+        "online",
+        updateSessionManagementAvailability
+    );
+
+    window.addEventListener(
+        "offline",
+        updateSessionManagementAvailability
+    );
+
+    document.addEventListener(
+        "cloud-data-loaded",
+        updateSessionManagementAvailability
+    );
+
+    updateSessionManagementAvailability();
 }

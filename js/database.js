@@ -354,6 +354,42 @@ export function loadSessionsFromDatabase() {
     });
 }
 
+
+export function replaceSessionCacheInDatabase(sessions) {
+    return new Promise(function (resolve, reject) {
+        const transaction =
+            state.database.transaction("sessions", "readwrite");
+        const store = transaction.objectStore("sessions");
+        const clearRequest = store.clear();
+
+        clearRequest.onerror = function () {
+            reject(clearRequest.error);
+        };
+
+        clearRequest.onsuccess = function () {
+            sessions.forEach(function (session) {
+                store.put(session);
+            });
+        };
+
+        transaction.oncomplete = function () {
+            resolve(sessions);
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error);
+        };
+
+        transaction.onabort = function () {
+            reject(
+                transaction.error ||
+                new Error("Session cache replacement aborted.")
+            );
+        };
+    });
+}
+
+
 export function createSessionInDatabase(session) {
     return new Promise(function (resolve, reject) {
         const transaction = state.database.transaction("sessions", "readwrite");
