@@ -18,7 +18,7 @@ import { isTrainingUser } from "./permissions.js";
 import {
     attemptImmediateAtomicSale,
     refreshLocalCacheFromCloud
-} from "./cloud-sync.js?v=step6b";
+} from "./cloud-sync.js?v=step6b1";
 
 function isVariantProduct(product) {
     return Boolean(product.groupId && product.variantName);
@@ -659,19 +659,32 @@ async function completeSale() {
     dom.completeSaleButton.disabled = true;
 
     try {
+        /*
+         * ONLINE:
+         * Supabase must accept the atomic sale before we tell the operator the
+         * sale succeeded. This prevents two online tills from both appearing
+         * to sell the final unit.
+         *
+         * OFFLINE / TEMPORARY NETWORK FAILURE:
+         * save locally and use the durable queue as before.
+         */
         const cloudAttempt =
             await attemptImmediateAtomicSale(
                 saleRecord
             );
 
-        if (cloudAttempt.status === "rejected") {
+        if (
+            cloudAttempt.status ===
+            "rejected"
+        ) {
             await refreshLocalCacheFromCloud()
                 .catch(function () {});
 
             window.alert(
                 "Sale could not be completed.\n\n" +
                 (
-                    cloudAttempt.code === "INSUFFICIENT_STOCK"
+                    cloudAttempt.code ===
+                    "INSUFFICIENT_STOCK"
                         ? "This product has just sold out or no longer has enough stock available on another Till."
                         : cloudAttempt.message
                 ) +
@@ -682,12 +695,14 @@ async function completeSale() {
         }
 
         const cloudConfirmed =
-            cloudAttempt.status === "confirmed";
+            cloudAttempt.status ===
+            "confirmed";
 
-        const savedSaleId = await saveCompletedSaleTransaction(
-            saleRecord,
-            updatedProducts
-        );
+        const savedSaleId =
+            await saveCompletedSaleTransaction(
+                saleRecord,
+                updatedProducts
+            );
 
         state.products = updatedProducts;
         state.sales.unshift({
@@ -760,6 +775,10 @@ async function completeSale() {
         );
 
         if (cloudConfirmed) {
+            /*
+             * Reload the confirmed shared stock immediately so this device
+             * picks up any simultaneous sale made by another Till.
+             */
             await refreshLocalCacheFromCloud()
                 .catch(function () {});
         }

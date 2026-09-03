@@ -289,6 +289,35 @@ export function saveCompletedSaleTransaction(sale, updatedProducts) {
     });
 }
 
+
+export function deleteSaleFromDatabase(saleId) {
+    return new Promise(function (resolve, reject) {
+        const transaction =
+            state.database.transaction("sales", "readwrite");
+
+        const store =
+            transaction.objectStore("sales");
+
+        store.delete(Number(saleId));
+
+        transaction.oncomplete = function () {
+            resolve(true);
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error);
+        };
+
+        transaction.onabort = function () {
+            reject(
+                transaction.error ||
+                new Error("Sale deletion was aborted.")
+            );
+        };
+    });
+}
+
+
 export function saveVoidedSaleTransaction(sale, updatedProducts) {
     return new Promise(function (resolve, reject) {
         const transaction = state.database.transaction(

@@ -3,7 +3,11 @@ import { state } from "./state.js";
 import { supabaseConfig } from "./config.js";
 import { isMasterAdmin } from "./permissions.js";
 import { getValidCloudAccessToken, isCloudUsername } from "./auth.js";
-import { replaceCloudDataInDatabase, replaceCloudCatalogueInDatabase } from "./database.js";
+import {
+    replaceCloudDataInDatabase,
+    replaceCloudCatalogueInDatabase,
+    deleteSaleFromDatabase
+} from "./database.js?v=step6b1";
 
 const CLOUD_DIRTY_KEY = "merchTillCloudDirty";
 const CLOUD_PENDING_SALES_KEY = "merchTillPendingCloudSales";
@@ -344,17 +348,22 @@ async function processSaleAtomically(operation) {
 
 export async function attemptImmediateAtomicSale(sale) {
     if (!navigator.onLine) {
-        return { status: "deferred" };
+        return {
+            status: "deferred"
+        };
     }
 
     try {
         const result =
-            await processSaleAtomically({ sale });
+            await processSaleAtomically({
+                sale
+            });
 
         return {
             status: "confirmed",
             result
         };
+
     } catch (error) {
         const conflict =
             atomicSaleErrorInfo(error);
@@ -363,11 +372,14 @@ export async function attemptImmediateAtomicSale(sale) {
             return {
                 status: "rejected",
                 code: conflict.code,
-                message: conflict.message,
-                error
+                message: conflict.message
             };
         }
 
+        /*
+         * Technical/network errors are still safe to queue. They are not
+         * treated as business-rule rejections.
+         */
         return {
             status: "deferred",
             error
@@ -380,10 +392,7 @@ async function uploadSaleOperationQueue() {
     const operations =
         readOperationQueue()
             .filter(function (operation) {
-                return (
-                    operation.type === "sale" &&
-                    operation.status !== "conflict"
-                );
+                return operation.type === "sale";
             });
 
     for (const operation of operations) {
@@ -488,24 +497,21 @@ async function uploadSaleOperationQueue() {
                 atomicSaleErrorInfo(error);
 
             if (conflict) {
-                updateQueuedOperation(
-                    operation.id,
-                    {
-                        status: "conflict",
-                        conflictCode: conflict.code,
-                        attempts,
-                        lastError: conflict.message,
-                        lastAttemptAt:
-                            new Date().toISOString()
-                    }
+                /*
+                 * This is not a temporary connection problem.
+                 *
+                 * Example: an offline Till believed stock was 1, but another
+                 * device sold the final unit first. Supabase rejects the sale.
+                 *
+                 * The rejected sale must never enter Reports later merely
+                 * because stock is replenished, so remove it locally and from
+                 * the retry queue immediately.
+                 */
+                await discardRejectedOfflineSale(
+                    operation,
+                    conflict
                 );
 
-                updateCloudUploadStatus(
-                    `Cloud sync conflict: ${conflict.message} The sale will not retry automatically.`,
-                    true
-                );
-
-                updateCloudUploadCounts();
                 continue;
             }
 
@@ -520,6 +526,10 @@ async function uploadSaleOperationQueue() {
             );
 
             updateCloudUploadCounts();
+
+            /*
+             * Genuine technical failures remain durable and retry later.
+             */
             continue;
         }
     }
@@ -700,50 +710,96 @@ function pendingOperationCount() {
 }
 
 
-function retryableOperationCount() {
-    return readOperationQueue().filter(function (operation) {
-        return (
-            operation.type === "sale" &&
-            operation.status !== "conflict"
-        );
-    }).length;
-}
-
-function conflictOperationCount() {
-    return readOperationQueue().filter(function (operation) {
-        return (
-            operation.type === "sale" &&
-            operation.status === "conflict"
-        );
-    }).length;
-}
-
 function atomicSaleErrorInfo(error) {
     const text =
         `${error?.message || ""} ${error?.details || ""}`;
 
     const knownConflicts = [
-        ["INSUFFICIENT_STOCK", "This product has just sold out or no longer has enough stock available."],
-        ["PRODUCT_NOT_FOUND", "One of the products in this sale is no longer available."],
-        ["SESSION_NOT_FOUND", "The trading session for this sale no longer exists in the cloud."],
-        ["INVALID_QUANTITY", "The sale contains an invalid product quantity."],
-        ["ITEM_COUNT_MISMATCH", "The sale data did not pass the cloud consistency check."],
-        ["USER_DISABLED", "This account has been disabled."],
-        ["ROLE_NOT_ALLOWED", "This account is not permitted to complete cloud sales."],
-        ["AUTH_REQUIRED", "The cloud session is no longer authorised."]
+        {
+            code: "INSUFFICIENT_STOCK",
+            message:
+                "The sale was rejected because the cloud stock was no longer available."
+        },
+        {
+            code: "PRODUCT_NOT_FOUND",
+            message:
+                "The sale was rejected because a product no longer exists in the cloud catalogue."
+        },
+        {
+            code: "SESSION_NOT_FOUND",
+            message:
+                "The sale was rejected because its trading session could not be found."
+        },
+        {
+            code: "INVALID_QUANTITY",
+            message:
+                "The sale was rejected because its item quantity was invalid."
+        },
+        {
+            code: "ITEM_COUNT_MISMATCH",
+            message:
+                "The sale was rejected because its item totals did not pass validation."
+        }
     ];
 
-    for (const [code, message] of knownConflicts) {
-        if (text.includes(code)) {
-            return { code, message };
-        }
-    }
-
-    return null;
+    return (
+        knownConflicts.find(function (conflict) {
+            return text.includes(conflict.code);
+        }) || null
+    );
 }
 
-function hasUnresolvedSaleConflicts() {
-    return conflictOperationCount() > 0;
+async function discardRejectedOfflineSale(operation, conflict) {
+    const saleId =
+        operation?.sale?.id;
+
+    if (
+        saleId !== undefined &&
+        saleId !== null
+    ) {
+        await deleteSaleFromDatabase(
+            saleId
+        );
+
+        state.sales =
+            state.sales.filter(function (sale) {
+                return (
+                    String(sale.id) !==
+                    String(saleId)
+                );
+            });
+    }
+
+    removeQueuedOperation(
+        operation.id
+    );
+
+    /*
+     * Refresh Reports immediately without creating any new dirty cloud work.
+     */
+    document.dispatchEvent(
+        new CustomEvent(
+            "sales-changed",
+            {
+                detail: {
+                    type:
+                        "rejected-offline-conflict",
+                    cloudConfirmed: true,
+                    saleId,
+                    conflictCode:
+                        conflict.code
+                }
+            }
+        )
+    );
+
+    updateCloudUploadStatus(
+        "An offline sale was rejected because the stock was no longer available. " +
+        "It has been removed from reporting and will not retry.",
+        true
+    );
+
+    updateCloudUploadCounts();
 }
 
 
@@ -766,10 +822,6 @@ function operationBackoffMs(operation) {
 }
 
 function operationIsReady(operation) {
-    if (operation.status === "conflict") {
-        return false;
-    }
-
     if (!operation.lastAttemptAt) {
         return true;
     }
@@ -790,26 +842,15 @@ function operationIsReady(operation) {
 function queueStatusSummary() {
     const queue = readOperationQueue();
 
-    const retryable =
-        queue.filter(function (operation) {
-            return operation.status !== "conflict";
-        });
-
-    const conflicts =
-        queue.filter(function (operation) {
-            return operation.status === "conflict";
-        });
-
     const lastErrorOperation =
-        [...retryable]
+        [...queue]
             .reverse()
             .find(function (operation) {
                 return Boolean(operation.lastError);
             });
 
     return {
-        count: retryable.length,
-        conflicts: conflicts.length,
+        count: queue.length,
         lastError:
             lastErrorOperation
                 ? lastErrorOperation.lastError
@@ -825,7 +866,7 @@ export function hasPendingCloudChanges() {
         dirty.products ||
         dirty.sessions ||
         dirty.sales ||
-        retryableOperationCount() > 0
+        pendingOperationCount() > 0
     );
 }
 
@@ -861,16 +902,13 @@ export async function refreshLocalCacheFromCloud() {
     try {
         const role = sessionStorage.getItem("merchTillRole") || "";
         const staffMode = role === "staff";
-        const preserveLocalSales =
-            staffMode ||
-            hasUnresolvedSaleConflicts();
 
+        // Staff do not have permission to browse historic sales. They only
+        // need the shared product catalogue and current session to operate
+        // the Till. Admins continue to download the full reporting dataset.
         const productRows = await fetchCloudRows("products");
         const sessionRows = await fetchCloudRows("sessions");
-        const saleRows =
-            preserveLocalSales
-                ? null
-                : await fetchCloudRows("sales");
+        const saleRows = staffMode ? null : await fetchCloudRows("sales");
 
         const products = productRows
             .map(unmapProduct)
@@ -884,7 +922,7 @@ export async function refreshLocalCacheFromCloud() {
 
         let sales = state.sales;
 
-        if (!preserveLocalSales) {
+        if (!staffMode) {
             sales = saleRows
                 .map(unmapSale)
                 .sort(function (first, second) {
@@ -901,7 +939,7 @@ export async function refreshLocalCacheFromCloud() {
         state.products = products;
         state.sessions = sessions;
 
-        if (!preserveLocalSales) {
+        if (!staffMode) {
             state.sales = sales;
         }
 
@@ -917,16 +955,9 @@ export async function refreshLocalCacheFromCloud() {
             minute: "2-digit"
         });
 
-        if (hasUnresolvedSaleConflicts()) {
-            updateCloudUploadStatus(
-                `Shared cloud catalogue loaded at ${loadedAt}. A sale sync conflict requires review.`,
-                true
-            );
-        } else {
-            updateCloudUploadStatus(
-                `Shared cloud data loaded at ${loadedAt}.`
-            );
-        }
+        updateCloudUploadStatus(
+            `Shared cloud data loaded at ${loadedAt}.`
+        );
 
         document.dispatchEvent(
             new CustomEvent("cloud-data-loaded")
@@ -1010,11 +1041,6 @@ function updateCloudUploadCounts() {
         }
     }
 
-    if (queueSummary.conflicts > 0) {
-        queueText +=
-            ` · ${queueSummary.conflicts} sync conflict${queueSummary.conflicts === 1 ? "" : "s"} require review`;
-    }
-
     dom.cloudUploadCounts.textContent =
         `${state.products.length} products · ` +
         `${state.sessions.length} sessions · ` +
@@ -1038,7 +1064,7 @@ export async function flushPendingCloudSync() {
     }
 
     const dirty = readDirtyState();
-    const hasQueuedSales = retryableOperationCount() > 0;
+    const hasQueuedSales = pendingOperationCount() > 0;
 
     // A queued offline sale is pending work even if the older boolean dirty
     // flags have already been cleared. Previously this early return prevented
@@ -1070,17 +1096,17 @@ export async function flushPendingCloudSync() {
              * durable operation queue. The older dirty.products path is kept
              * only for non-sale workflows such as a void until Priority 5.
              */
-            if (retryableOperationCount() > 0) {
+            if (pendingOperationCount() > 0) {
                 await uploadSaleOperationQueue();
             }
 
-            if (dirty.products && retryableOperationCount() === 0) {
+            if (dirty.products && pendingOperationCount() === 0) {
                 await syncStaffProductStockSnapshot();
                 dirty.products = false;
                 writeDirtyState(dirty);
             }
 
-            if (dirty.sales && retryableOperationCount() === 0) {
+            if (dirty.sales && pendingOperationCount() === 0) {
                 dirty.sales = false;
                 writeDirtyState(dirty);
             }
@@ -1099,11 +1125,11 @@ export async function flushPendingCloudSync() {
                 writeDirtyState(dirty);
             }
 
-            if (retryableOperationCount() > 0) {
+            if (pendingOperationCount() > 0) {
                 await uploadSaleOperationQueue();
             }
 
-            if (dirty.sales && retryableOperationCount() === 0) {
+            if (dirty.sales && pendingOperationCount() === 0) {
                 // Keep the existing Admin snapshot behaviour only for report
                 // edits such as transaction voids. New sales are owned by the
                 // durable operation queue above.
@@ -1297,7 +1323,9 @@ export function initialiseCloudSync() {
             event.detail.type === "created" &&
             event.detail.sale
         ) {
-            if (event.detail.cloudConfirmed === true) {
+            if (
+                event.detail.cloudConfirmed === true
+            ) {
                 updateCloudUploadCounts();
                 return;
             }
@@ -1312,10 +1340,22 @@ export function initialiseCloudSync() {
             return;
         }
 
+        if (
+            event.detail &&
+            event.detail.type ===
+                "rejected-offline-conflict"
+        ) {
+            /*
+             * Local/reporting cleanup only. Do not turn a rejected sale into a
+             * new dirty cloud operation.
+             */
+            updateCloudUploadCounts();
+            return;
+        }
+
         /*
          * Non-created sale changes (currently voiding) continue through the
-         * transitional dirty path until Priority 5 moves those operations to
-         * the same server-side transaction model.
+         * transitional dirty path.
          */
         updateCloudUploadCounts();
         markDirty({ products: true, sales: true });
