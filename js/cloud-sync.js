@@ -8,6 +8,8 @@ import { replaceCloudDataInDatabase, replaceCloudCatalogueInDatabase } from "./d
 const CLOUD_DIRTY_KEY = "merchTillCloudDirty";
 const CLOUD_PENDING_SALES_KEY = "merchTillPendingCloudSales";
 const CLOUD_OPERATION_QUEUE_KEY = "merchTillCloudOperationQueueV1";
+const CLOUD_QUEUE_BASE_BACKOFF_MS = 5000;
+const CLOUD_QUEUE_MAX_BACKOFF_MS = 5 * 60 * 1000;
 let syncTimer = null;
 let syncInProgress = false;
 
@@ -277,6 +279,10 @@ async function uploadSaleOperationQueue() {
             });
 
     for (const operation of operations) {
+        if (!operationIsReady(operation)) {
+            continue;
+        }
+
         const mappedSale =
             mapSale(operation.sale);
 
@@ -314,6 +320,7 @@ async function uploadSaleOperationQueue() {
                 );
 
                 operation.saleConfirmed = true;
+                updateCloudUploadCounts();
             }
 
             /*
@@ -366,6 +373,7 @@ async function uploadSaleOperationQueue() {
                 );
 
                 operation.stockConfirmed = true;
+                updateCloudUploadCounts();
             }
 
             if (
@@ -375,6 +383,8 @@ async function uploadSaleOperationQueue() {
                 removeQueuedOperation(
                     operation.id
                 );
+
+                updateCloudUploadCounts();
             }
 
         } catch (error) {
@@ -396,11 +406,14 @@ async function uploadSaleOperationQueue() {
                 }
             );
 
+            updateCloudUploadCounts();
+
             /*
-             * Preserve this operation and stop this pass. The existing online,
-             * focus, pageshow and interval retry triggers will try again.
+             * Preserve the failed operation. A different queued operation may
+             * still be able to sync, so continue this pass instead of blocking
+             * the entire queue behind one failure.
              */
-            throw error;
+            continue;
         }
     }
 }
@@ -580,6 +593,62 @@ function pendingOperationCount() {
 }
 
 
+function operationBackoffMs(operation) {
+    const attempts =
+        Math.max(
+            0,
+            Number(operation.attempts || 0)
+        );
+
+    if (attempts <= 0) {
+        return 0;
+    }
+
+    return Math.min(
+        CLOUD_QUEUE_MAX_BACKOFF_MS,
+        CLOUD_QUEUE_BASE_BACKOFF_MS *
+            Math.pow(2, attempts - 1)
+    );
+}
+
+function operationIsReady(operation) {
+    if (!operation.lastAttemptAt) {
+        return true;
+    }
+
+    const lastAttempt =
+        Date.parse(operation.lastAttemptAt);
+
+    if (!Number.isFinite(lastAttempt)) {
+        return true;
+    }
+
+    return (
+        Date.now() - lastAttempt >=
+        operationBackoffMs(operation)
+    );
+}
+
+function queueStatusSummary() {
+    const queue = readOperationQueue();
+
+    const lastErrorOperation =
+        [...queue]
+            .reverse()
+            .find(function (operation) {
+                return Boolean(operation.lastError);
+            });
+
+    return {
+        count: queue.length,
+        lastError:
+            lastErrorOperation
+                ? lastErrorOperation.lastError
+                : null
+    };
+}
+
+
 export function hasPendingCloudChanges() {
     const dirty = readDirtyState();
 
@@ -747,15 +816,26 @@ function updateCloudUploadCounts() {
         return;
     }
 
-    const waiting = pendingOperationCount();
+    const queueSummary =
+        queueStatusSummary();
+
+    let queueText = "";
+
+    if (queueSummary.count > 0) {
+        queueText =
+            ` · ${queueSummary.count} operation${queueSummary.count === 1 ? "" : "s"} waiting to sync`;
+
+        if (queueSummary.lastError) {
+            queueText +=
+                ` · last error: ${queueSummary.lastError}`;
+        }
+    }
 
     dom.cloudUploadCounts.textContent =
         `${state.products.length} products · ` +
         `${state.sessions.length} sessions · ` +
         `${state.sales.length} transactions in this device's local database` +
-        (waiting > 0
-            ? ` · ${waiting} operation${waiting === 1 ? "" : "s"} waiting to sync`
-            : "");
+        queueText;
 }
 
 function scheduleCloudSync() {
@@ -854,7 +934,23 @@ export async function flushPendingCloudSync() {
             minute: "2-digit"
         });
 
-        updateCloudUploadStatus(`Cloud synced automatically at ${completedAt}.`);
+        const queueSummary =
+            queueStatusSummary();
+
+        if (queueSummary.count > 0) {
+            updateCloudUploadStatus(
+                queueSummary.lastError
+                    ? `Cloud sync waiting to retry ${queueSummary.count} operation${queueSummary.count === 1 ? "" : "s"}.`
+                    : `${queueSummary.count} cloud operation${queueSummary.count === 1 ? "" : "s"} still waiting to sync.`,
+                Boolean(queueSummary.lastError)
+            );
+        } else {
+            updateCloudUploadStatus(
+                `Cloud synced automatically at ${completedAt}.`
+            );
+        }
+
+        updateCloudUploadCounts();
         return true;
     } catch (error) {
         console.warn("Automatic cloud sync is pending:", error);
@@ -965,6 +1061,22 @@ async function uploadExistingTillData() {
 export function initialiseCloudSync() {
     migrateLegacyPendingSalesQueue();
     updateCloudUploadCounts();
+
+    /*
+     * If the browser/app was closed with pending work, the localStorage queue
+     * survives. Give it an automatic recovery attempt after startup.
+     */
+    if (
+        navigator.onLine &&
+        hasPendingCloudChanges()
+    ) {
+        window.setTimeout(
+            function () {
+                flushPendingCloudSync();
+            },
+            1000
+        );
+    }
 
     if (dom.uploadCloudDataButton) {
         dom.uploadCloudDataButton.addEventListener("click", uploadExistingTillData);
