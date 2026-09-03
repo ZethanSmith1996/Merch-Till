@@ -445,7 +445,7 @@ async function applyConfirmedOrderNumber(
 }
 
 
-export async function refreshSharedProductsFromCloud() {
+export async function refreshSharedOperationalDataFromCloud() {
     const username =
         sessionStorage.getItem(
             "merchTillUsername"
@@ -465,22 +465,52 @@ export async function refreshSharedProductsFromCloud() {
         true;
 
     try {
-        const productRows =
-            await fetchCloudRows(
-                "products"
-            );
+        /*
+         * Priority 7A:
+         * Keep only operational data fresh in the background.
+         *
+         * We deliberately do NOT download sales/reports/users here.
+         * Products and sessions are the two pieces another live Till needs
+         * in order to react to stock changes and Trading Open/Closed changes.
+         */
+        const [
+            productRows,
+            sessionRows
+        ] = await Promise.all([
+            fetchCloudRows("products"),
+            fetchCloudRows("sessions")
+        ]);
 
         const products =
             productRows
                 .map(unmapProduct)
                 .sort(compareProducts);
 
-        await replaceProductCacheInDatabase(
-            products
+        const sessions =
+            sessionRows
+                .map(unmapSession)
+                .sort(compareSessions);
+
+        const previousOpenSession =
+            state.sessions.find(function (session) {
+                return !session.closedAt;
+            }) || null;
+
+        const nextOpenSession =
+            sessions.find(function (session) {
+                return !session.closedAt;
+            }) || null;
+
+        await replaceCloudCatalogueInDatabase(
+            products,
+            sessions
         );
 
         state.products =
             products;
+
+        state.sessions =
+            sessions;
 
         document.dispatchEvent(
             new CustomEvent(
@@ -496,15 +526,45 @@ export async function refreshSharedProductsFromCloud() {
             )
         );
 
+        const sessionChanged =
+            String(
+                previousOpenSession?.id ?? ""
+            ) !==
+            String(
+                nextOpenSession?.id ?? ""
+            ) ||
+            String(
+                previousOpenSession?.closedAt ?? ""
+            ) !==
+            String(
+                nextOpenSession?.closedAt ?? ""
+            );
+
+        if (sessionChanged) {
+            document.dispatchEvent(
+                new CustomEvent(
+                    "sessions-changed",
+                    {
+                        detail: {
+                            cloudConfirmed:
+                                true,
+                            sharedRefresh:
+                                true
+                        }
+                    }
+                )
+            );
+        }
+
         return true;
 
     } catch (error) {
         /*
-         * This is an opportunistic multi-device refresh. A temporary failure
-         * must not interrupt service or replace the normal durable sync status.
+         * Opportunistic refresh only. A temporary refresh failure must not
+         * interrupt Till operation or interfere with durable reconnect sync.
          */
         console.warn(
-            "Shared product stock refresh failed:",
+            "Shared operational-data refresh failed:",
             error
         );
 
@@ -515,7 +575,6 @@ export async function refreshSharedProductsFromCloud() {
             false;
     }
 }
-
 
 async function uploadSaleOperationQueue() {
     const operations =
@@ -1587,7 +1646,7 @@ export function initialiseCloudSync() {
      * Multi-device stock visibility.
      *
      * When this device has no unsynced local work, lightly refresh only the
-     * product catalogue every 3 seconds. This means a sale on Till A quickly
+     * product catalogue and trading-session state every 3 seconds. This means a sale on Till A quickly
      * changes stock/Sold Out state on Till B without downloading Reports or
      * disturbing the durable offline queue.
      */
@@ -1596,7 +1655,7 @@ export function initialiseCloudSync() {
             navigator.onLine &&
             !hasPendingCloudChanges()
         ) {
-            refreshSharedProductsFromCloud();
+            refreshSharedOperationalDataFromCloud();
         }
     }, 3000);
 }
