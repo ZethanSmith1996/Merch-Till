@@ -512,6 +512,16 @@ export async function refreshSharedOperationalDataFromCloud() {
         state.sessions =
             sessions;
 
+        /*
+         * The Trading Open/Closed UI reads state.currentSession rather than
+         * searching state.sessions each time. Keep that pointer in sync with
+         * the newly-fetched cloud session list.
+         */
+        state.currentSession =
+            sessions.find(function (session) {
+                return !session.closedAt;
+            }) || null;
+
         document.dispatchEvent(
             new CustomEvent(
                 "products-changed",
