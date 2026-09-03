@@ -380,7 +380,8 @@ export function hasPendingCloudChanges() {
 }
 
 export async function refreshLocalCacheFromCloud() {
-    const username = sessionStorage.getItem("merchTillUsername") || "";
+    const username =
+        sessionStorage.getItem("merchTillUsername") || "";
 
     if (!isCloudUsername(username)) {
         return false;
@@ -394,63 +395,129 @@ export async function refreshLocalCacheFromCloud() {
         return false;
     }
 
+    /*
+     * First try to flush anything genuinely pending.
+     */
     if (hasPendingCloudChanges()) {
         await flushPendingCloudSync();
-
-        if (hasPendingCloudChanges()) {
-            updateCloudUploadStatus(
-                "Cloud download paused because this device still has local changes waiting to upload.",
-                true
-            );
-            return false;
-        }
     }
 
-    updateCloudUploadStatus("Loading shared Till data from the cloud…");
+    const dirtyAfterFlush =
+        readDirtyState();
+
+    const queuedSalesAfterFlush =
+        readPendingSalesQueue();
+
+    const stillHasPendingSales =
+        dirtyAfterFlush.sales ||
+        queuedSalesAfterFlush.length > 0;
+
+    const stillHasPendingStock =
+        dirtyAfterFlush.products ||
+        stillHasPendingSales;
+
+    updateCloudUploadStatus(
+        stillHasPendingStock
+            ? "Loading cloud catalogue while preserving pending local stock changes…"
+            : "Loading shared Till data from the cloud…"
+    );
 
     try {
-        const role = sessionStorage.getItem("merchTillRole") || "";
-        const staffMode = role === "staff";
+        const role =
+            sessionStorage.getItem("merchTillRole") || "";
 
-        // Staff do not have permission to browse historic sales. They only
-        // need the shared product catalogue and current session to operate
-        // the Till. Admins continue to download the full reporting dataset.
-        const productRows = await fetchCloudRows("products");
-        const sessionRows = await fetchCloudRows("sessions");
-        const saleRows = staffMode ? null : await fetchCloudRows("sales");
+        const staffMode =
+            role === "staff";
 
-        const products = productRows
-            .map(unmapProduct)
-            .sort(compareProducts);
+        /*
+         * Products and sessions are safe to refresh even if a sale is still
+         * queued. When stock is pending, preserve this device's local stock
+         * values for products already cached so an offline sale deduction is
+         * not overwritten by an older cloud stock value.
+         */
+        const productRows =
+            await fetchCloudRows("products");
 
-        const sessions = sessionRows
-            .map(unmapSession)
-            .sort(function (first, second) {
-                return second.openedAt.localeCompare(first.openedAt);
-            });
+        const sessionRows =
+            await fetchCloudRows("sessions");
 
-        let sales = state.sales;
+        const cloudProducts =
+            productRows
+                .map(unmapProduct)
+                .sort(compareProducts);
 
-        if (!staffMode) {
-            sales = saleRows
-                .map(unmapSale)
+        const products =
+            stillHasPendingStock
+                ? cloudProducts.map(function (cloudProduct) {
+                    const localProduct =
+                        state.products.find(function (product) {
+                            return (
+                                String(product.id) ===
+                                String(cloudProduct.id)
+                            );
+                        });
+
+                    if (!localProduct) {
+                        return cloudProduct;
+                    }
+
+                    return {
+                        ...cloudProduct,
+                        stock:
+                            Number(localProduct.stock) || 0
+                    };
+                })
+                : cloudProducts;
+
+        const sessions =
+            sessionRows
+                .map(unmapSession)
                 .sort(function (first, second) {
-                    return second.createdAt.localeCompare(first.createdAt);
+                    return second.openedAt.localeCompare(
+                        first.openedAt
+                    );
                 });
 
-            await replaceCloudDataInDatabase(products, sales, sessions);
+        let sales =
+            state.sales;
+
+        /*
+         * Do not replace the local sale cache while any local sale is still
+         * waiting for Supabase acknowledgement.
+         */
+        if (!staffMode && !stillHasPendingSales) {
+            const saleRows =
+                await fetchCloudRows("sales");
+
+            sales =
+                saleRows
+                    .map(unmapSale)
+                    .sort(function (first, second) {
+                        return second.createdAt.localeCompare(
+                            first.createdAt
+                        );
+                    });
+
+            await replaceCloudDataInDatabase(
+                products,
+                sales,
+                sessions
+            );
+
+            state.sales =
+                sales;
         } else {
-            // Preserve the work tablet's local historic sales cache. A new
-            // Staff device receives only the data Staff actually needs.
-            await replaceCloudCatalogueInDatabase(products, sessions);
+            await replaceCloudCatalogueInDatabase(
+                products,
+                sessions
+            );
         }
 
-        state.products = products;
-        state.sessions = sessions;
+        state.products =
+            products;
 
-        if (!staffMode) {
-            state.sales = sales;
-        }
+        state.sessions =
+            sessions;
 
         state.currentSession =
             sessions.find(function (session) {
@@ -459,26 +526,48 @@ export async function refreshLocalCacheFromCloud() {
 
         updateCloudUploadCounts();
 
-        const loadedAt = new Date().toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit"
-        });
+        const loadedAt =
+            new Date().toLocaleTimeString(
+                "en-GB",
+                {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                }
+            );
 
-        updateCloudUploadStatus(
-            `Shared cloud data loaded at ${loadedAt}.`
-        );
+        if (
+            stillHasPendingStock ||
+            stillHasPendingSales
+        ) {
+            updateCloudUploadStatus(
+                `Cloud catalogue loaded at ${loadedAt}. Some local sale/stock changes are still waiting to sync.`,
+                true
+            );
+        } else {
+            updateCloudUploadStatus(
+                `Shared cloud data loaded at ${loadedAt}.`
+            );
+        }
 
         document.dispatchEvent(
-            new CustomEvent("cloud-data-loaded")
+            new CustomEvent(
+                "cloud-data-loaded"
+            )
         );
 
         return true;
+
     } catch (error) {
-        console.warn("Shared cloud data could not be loaded:", error);
+        console.warn(
+            "Shared cloud data could not be loaded:",
+            error
+        );
+
         updateCloudUploadStatus(
             "Cloud data could not be loaded. Showing this device's cached Till data.",
             true
         );
+
         return false;
     }
 }
