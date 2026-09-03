@@ -1,7 +1,6 @@
 import { dom } from "./dom.js";
 import { state } from "./state.js";
 import { supabaseConfig } from "./config.js";
-import { isMasterAdmin } from "./permissions.js";
 import { getValidCloudAccessToken, isCloudUsername } from "./auth.js";
 import { replaceCloudDataInDatabase, replaceCloudCatalogueInDatabase } from "./database.js";
 
@@ -86,36 +85,7 @@ function unmapSale(row) {
     };
 }
 
-function mapProduct(product) {
-    return {
-        id: product.id,
-        name: product.name,
-        price: Number(product.price) || 0,
-        stock: Number(product.stock) || 0,
-        group_id: product.groupId || null,
-        variant_name: product.variantName || null,
-        variant_order: Number.isFinite(product.variantOrder)
-            ? product.variantOrder
-            : null,
-        sort_order: Number.isFinite(product.sortOrder)
-            ? product.sortOrder
-            : null,
-        tile_color: product.tileColor || "default",
-        cloud_updated_at: new Date().toISOString()
-    };
-}
 
-function mapSession(session) {
-    return {
-        id: session.id,
-        opened_at: session.openedAt,
-        closed_at: session.closedAt || null,
-        opened_by: session.openedBy || null,
-        closed_by: session.closedBy || null,
-        status: session.status || (session.closedAt ? "closed" : "open"),
-        cloud_updated_at: new Date().toISOString()
-    };
-}
 
 function mapSale(sale) {
     return {
@@ -203,45 +173,12 @@ async function insertRowsIgnoringDuplicates(tableName, rows) {
     });
 }
 
-async function deleteCloudProduct(productId) {
-    await cloudRequest(`products?id=eq.${encodeURIComponent(productId)}`, {
-        method: "DELETE",
-        headers: {
-            "Prefer": "return=minimal"
-        }
-    });
-}
 
-async function syncProductsSnapshot() {
-    const products = state.products.map(mapProduct);
-    await upsertRows("products", products);
-
-    const response = await cloudRequest("products?select=id", {
-        method: "GET",
-        headers: {
-            "Accept": "application/json"
-        }
-    });
-
-    const cloudProducts = await response.json();
-    const localIds = new Set(state.products.map(function (product) {
-        return String(product.id);
-    }));
-
-    const staleCloudProducts = cloudProducts.filter(function (product) {
-        return !localIds.has(String(product.id));
-    });
-
-    for (const product of staleCloudProducts) {
-        await deleteCloudProduct(product.id);
-    }
-}
-
-async function syncStaffProductStockSnapshot() {
-    // Staff are permitted to update existing product rows, but not create,
-    // delete, reorder or otherwise manage the catalogue. Send only the stock
-    // value for each known product so a completed sale can reach the cloud
-    // without requiring Admin product-management privileges.
+async function syncProductStockSnapshot() {
+    // Sales and voids still change cached stock before Priority 5 introduces
+    // the atomic server-side sale/stock transaction. Until then, send only
+    // stock fields for existing products. Never upload catalogue metadata or
+    // delete cloud rows from a local snapshot.
     for (const product of state.products) {
         await cloudRequest(
             `products?id=eq.${encodeURIComponent(product.id)}`,
@@ -260,9 +197,6 @@ async function syncStaffProductStockSnapshot() {
     }
 }
 
-async function syncSessionsSnapshot() {
-    await upsertRows("sessions", state.sessions.map(mapSession));
-}
 
 
 async function uploadPendingSalesQueue() {
@@ -588,7 +522,7 @@ export async function flushPendingCloudSync() {
             // A Staff sale changes stock. PATCH only the stock fields of
             // existing products rather than upserting/managing the catalogue.
             if (dirty.products || dirty.sales || hasQueuedSales) {
-                await syncStaffProductStockSnapshot();
+                await syncProductStockSnapshot();
                 dirty.products = false;
                 writeDirtyState(dirty);
             }
@@ -611,7 +545,12 @@ export async function flushPendingCloudSync() {
             }
 
             if (dirty.products || dirty.sales) {
-                await syncProductsSnapshot();
+                /*
+                 * Product catalogue management is cloud-first. The only
+                 * locally-originated product changes that may still be dirty
+                 * here are stock changes caused by sales/voids.
+                 */
+                await syncProductStockSnapshot();
                 dirty.products = false;
                 writeDirtyState(dirty);
             }
@@ -663,107 +602,18 @@ export async function flushPendingCloudSync() {
     }
 }
 
-async function uploadExistingTillData() {
-    if (!isMasterAdmin()) {
-        window.alert("Only the Master Admin can upload the Till database to the cloud.");
-        return;
-    }
-
-    const accessToken = await getValidCloudAccessToken();
-
-    if (!accessToken) {
-        window.alert(
-            "A Supabase Master session is required. Log in as master on this device, then try again."
-        );
-        return;
-    }
-
-    updateCloudUploadCounts();
-
-    const shouldUpload = window.confirm(
-        "Upload this device's existing Till data to Supabase?\n\n" +
-        `${state.products.length} products\n` +
-        `${state.sessions.length} sessions\n` +
-        `${state.sales.length} transactions\n\n` +
-        "This copies the data to the cloud. It does not delete or replace the local IndexedDB database. Existing cloud rows with the same IDs will be updated."
-    );
-
-    if (!shouldUpload) {
-        return;
-    }
-
-    dom.uploadCloudDataButton.disabled = true;
-    dom.uploadCloudDataButton.textContent = "Uploading…";
-
-    try {
-        updateCloudUploadStatus("Uploading sessions…");
-        await syncSessionsSnapshot();
-
-        updateCloudUploadStatus("Sessions uploaded. Uploading products…");
-        await syncProductsSnapshot();
-
-        updateCloudUploadStatus("Products uploaded. Uploading transactions…");
-        await syncSalesSnapshot();
-
-        writeDirtyState({
-            products: false,
-            sessions: false,
-            sales: false
-        });
-
-        const completedAt = new Date().toLocaleString("en-GB", {
-            dateStyle: "medium",
-            timeStyle: "short"
-        });
-
-        updateCloudUploadStatus(
-            `Upload complete: ${state.products.length} products, ` +
-            `${state.sessions.length} sessions and ${state.sales.length} transactions. ` +
-            `Completed ${completedAt}. Automatic sync is active on this device.`
-        );
-
-        window.alert(
-            "Cloud upload complete.\n\n" +
-            `Products: ${state.products.length}\n` +
-            `Sessions: ${state.sessions.length}\n` +
-            `Transactions: ${state.sales.length}\n\n` +
-            "Automatic cloud sync is now active on this paired device."
-        );
-    } catch (error) {
-        console.error("Cloud upload failed:", error);
-        updateCloudUploadStatus(
-            "Upload failed. The local Till database is unchanged.",
-            true
-        );
-        window.alert(
-            "The cloud upload could not be completed.\n\n" +
-            "Your local Till database has not been changed.\n\n" +
-            error.message
-        );
-    } finally {
-        dom.uploadCloudDataButton.disabled = false;
-        dom.uploadCloudDataButton.textContent = "Upload Existing Till Data";
-    }
-}
 
 export function initialiseCloudSync() {
     updateCloudUploadCounts();
-
-    if (dom.uploadCloudDataButton) {
-        dom.uploadCloudDataButton.addEventListener("click", uploadExistingTillData);
-    }
 
     document.addEventListener("products-changed", function (event) {
         updateCloudUploadCounts();
 
         /*
-         * Product-management writes are now cloud-first. Once Supabase has
-         * confirmed an Add/Edit/Delete/Reorder operation, this event only
-         * refreshes the UI and must not trigger the legacy whole-catalogue
-         * snapshot uploader.
-         *
-         * Stock changes created by sales/voids still use the existing dirty
-         * mechanism until the atomic sale/stock roadmap stage.
+         * Catalogue management is cloud-first. Confirmed catalogue writes
+         * only refresh the UI/cache. Stock changes created by sales/voids
+         * still use the temporary dirty mechanism until Priority 5 replaces
+         * it with one atomic server-side sale + stock transaction.
          */
         if (
             event.detail &&
