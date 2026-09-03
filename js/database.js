@@ -290,6 +290,63 @@ export function saveCompletedSaleTransaction(sale, updatedProducts) {
 }
 
 
+
+export function updateSaleOrderNumberInDatabase(
+    saleId,
+    orderNumber
+) {
+    return new Promise(function (resolve, reject) {
+        const transaction =
+            state.database.transaction(
+                "sales",
+                "readwrite"
+            );
+
+        const store =
+            transaction.objectStore("sales");
+
+        const request =
+            store.get(Number(saleId));
+
+        request.onsuccess = function () {
+            const sale = request.result;
+
+            if (!sale) {
+                resolve(false);
+                return;
+            }
+
+            store.put({
+                ...sale,
+                orderNumber:
+                    Number(orderNumber)
+            });
+        };
+
+        request.onerror = function () {
+            reject(request.error);
+        };
+
+        transaction.oncomplete = function () {
+            resolve(true);
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error);
+        };
+
+        transaction.onabort = function () {
+            reject(
+                transaction.error ||
+                new Error(
+                    "Sale order-number update was aborted."
+                )
+            );
+        };
+    });
+}
+
+
 export function deleteSaleFromDatabase(saleId) {
     return new Promise(function (resolve, reject) {
         const transaction =

@@ -698,6 +698,22 @@ async function completeSale() {
             cloudAttempt.status ===
             "confirmed";
 
+        if (
+            cloudConfirmed &&
+            Number.isFinite(
+                Number(
+                    cloudAttempt.result
+                        ?.order_number
+                )
+            )
+        ) {
+            saleRecord.orderNumber =
+                Number(
+                    cloudAttempt.result
+                        .order_number
+                );
+        }
+
         const savedSaleId =
             await saveCompletedSaleTransaction(
                 saleRecord,
@@ -753,8 +769,28 @@ async function completeSale() {
             `Total: ${currencyFormatter.format(saleTotal)}`
         );
 
-        state.currentOrderNumber += 1;
-        dom.orderNumberDisplay.textContent = state.currentOrderNumber;
+        if (
+            cloudConfirmed &&
+            Number.isFinite(
+                Number(
+                    saleRecord.orderNumber
+                )
+            )
+        ) {
+            state.currentOrderNumber =
+                Number(
+                    saleRecord.orderNumber
+                ) + 1;
+        } else {
+            /*
+             * Offline order numbers are provisional. Supabase assigns the
+             * authoritative per-session number when the queued sale syncs.
+             */
+            state.currentOrderNumber += 1;
+        }
+
+        dom.orderNumberDisplay.textContent =
+            state.currentOrderNumber;
         state.cart.clear();
         clearCurrentDiscount();
 

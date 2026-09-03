@@ -4,7 +4,7 @@ import {
     initialiseUsersDatabase,
     loadSalesFromDatabase,
     loadSessionsFromDatabase
-} from "./database.js?v=step6b1";
+} from "./database.js?v=step6c";
 import {
     initialiseNavigation,
     applyNavigationPermissions
@@ -18,7 +18,7 @@ import {
     renderCart,
     renderTillProducts,
     refreshTillAvailability
-} from "./till.js?v=step6b1";
+} from "./till.js?v=step6c";
 import {
     initialiseSessions,
     renderSessionStatus,
@@ -32,7 +32,7 @@ import {
     initialiseUserManagement,
     renderUsersTable
 } from "./users.js?v=step1f2";
-import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=step6b1";
+import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=step6c";
 
 function refreshProductDisplays() {
     renderTillProducts();
@@ -58,6 +58,13 @@ async function startApplication() {
 
     document.addEventListener("products-changed", refreshProductDisplays);
     document.addEventListener("user-role-changed", refreshRolePermissions);
+    document.addEventListener(
+        "cloud-order-number-updated",
+        function () {
+            restoreCurrentOrderNumber();
+            renderReports();
+        }
+    );
     document.addEventListener("cloud-data-loaded", function () {
         restoreCurrentOrderNumber();
         refreshProductDisplays();

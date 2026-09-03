@@ -6,8 +6,10 @@ import { getValidCloudAccessToken, isCloudUsername } from "./auth.js";
 import {
     replaceCloudDataInDatabase,
     replaceCloudCatalogueInDatabase,
-    deleteSaleFromDatabase
-} from "./database.js?v=step6b1";
+    replaceProductCacheInDatabase,
+    deleteSaleFromDatabase,
+    updateSaleOrderNumberInDatabase
+} from "./database.js?v=step6c";
 
 const CLOUD_DIRTY_KEY = "merchTillCloudDirty";
 const CLOUD_PENDING_SALES_KEY = "merchTillPendingCloudSales";
@@ -16,6 +18,7 @@ const CLOUD_QUEUE_BASE_BACKOFF_MS = 5000;
 const CLOUD_QUEUE_MAX_BACKOFF_MS = 5 * 60 * 1000;
 let syncTimer = null;
 let syncInProgress = false;
+let sharedProductRefreshInProgress = false;
 
 function compareProducts(first, second) {
     const firstOrder = Number.isFinite(first.sortOrder)
@@ -388,6 +391,132 @@ export async function attemptImmediateAtomicSale(sale) {
 }
 
 
+async function applyConfirmedOrderNumber(
+    saleId,
+    orderNumber
+) {
+    if (
+        saleId === undefined ||
+        saleId === null ||
+        !Number.isFinite(
+            Number(orderNumber)
+        )
+    ) {
+        return;
+    }
+
+    const numericOrderNumber =
+        Number(orderNumber);
+
+    await updateSaleOrderNumberInDatabase(
+        saleId,
+        numericOrderNumber
+    );
+
+    state.sales =
+        state.sales.map(function (sale) {
+            if (
+                String(sale.id) !==
+                String(saleId)
+            ) {
+                return sale;
+            }
+
+            return {
+                ...sale,
+                orderNumber:
+                    numericOrderNumber
+            };
+        });
+
+    document.dispatchEvent(
+        new CustomEvent(
+            "cloud-order-number-updated",
+            {
+                detail: {
+                    saleId:
+                        Number(saleId),
+                    orderNumber:
+                        numericOrderNumber
+                }
+            }
+        )
+    );
+}
+
+
+export async function refreshSharedProductsFromCloud() {
+    const username =
+        sessionStorage.getItem(
+            "merchTillUsername"
+        ) || "";
+
+    if (
+        !isCloudUsername(username) ||
+        !navigator.onLine ||
+        document.hidden ||
+        hasPendingCloudChanges() ||
+        sharedProductRefreshInProgress
+    ) {
+        return false;
+    }
+
+    sharedProductRefreshInProgress =
+        true;
+
+    try {
+        const productRows =
+            await fetchCloudRows(
+                "products"
+            );
+
+        const products =
+            productRows
+                .map(unmapProduct)
+                .sort(compareProducts);
+
+        await replaceProductCacheInDatabase(
+            products
+        );
+
+        state.products =
+            products;
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "products-changed",
+                {
+                    detail: {
+                        cloudConfirmed:
+                            true,
+                        sharedRefresh:
+                            true
+                    }
+                }
+            )
+        );
+
+        return true;
+
+    } catch (error) {
+        /*
+         * This is an opportunistic multi-device refresh. A temporary failure
+         * must not interrupt service or replace the normal durable sync status.
+         */
+        console.warn(
+            "Shared product stock refresh failed:",
+            error
+        );
+
+        return false;
+
+    } finally {
+        sharedProductRefreshInProgress =
+            false;
+    }
+}
+
+
 async function uploadSaleOperationQueue() {
     const operations =
         readOperationQueue()
@@ -413,9 +542,25 @@ async function uploadSaleOperationQueue() {
              * in one transaction. If any part fails, all of it rolls back.
              */
             if (!operation.legacy) {
-                await processSaleAtomically(
-                    operation
-                );
+                const result =
+                    await processSaleAtomically(
+                        operation
+                    );
+
+                if (
+                    Number.isFinite(
+                        Number(
+                            result.order_number
+                        )
+                    )
+                ) {
+                    await applyConfirmedOrderNumber(
+                        operation.sale.id,
+                        Number(
+                            result.order_number
+                        )
+                    );
+                }
 
                 updateQueuedOperation(
                     operation.id,
@@ -426,7 +571,17 @@ async function uploadSaleOperationQueue() {
                             Number(operation.attempts || 0),
                         lastError: null,
                         confirmedAt:
-                            new Date().toISOString()
+                            new Date().toISOString(),
+                        orderNumber:
+                            Number.isFinite(
+                                Number(
+                                    result.order_number
+                                )
+                            )
+                                ? Number(
+                                    result.order_number
+                                )
+                                : null
                     }
                 );
 
@@ -1427,4 +1582,21 @@ export function initialiseCloudSync() {
             retryPendingCloudWork();
         }
     }, 5000);
+
+    /*
+     * Multi-device stock visibility.
+     *
+     * When this device has no unsynced local work, lightly refresh only the
+     * product catalogue every 3 seconds. This means a sale on Till A quickly
+     * changes stock/Sold Out state on Till B without downloading Reports or
+     * disturbing the durable offline queue.
+     */
+    window.setInterval(function () {
+        if (
+            navigator.onLine &&
+            !hasPendingCloudChanges()
+        ) {
+            refreshSharedProductsFromCloud();
+        }
+    }, 3000);
 }
