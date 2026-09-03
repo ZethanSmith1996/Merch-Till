@@ -15,6 +15,10 @@ import {
 
 import { createSaleRecord } from "./sales.js";
 import { isTrainingUser } from "./permissions.js";
+import {
+    attemptImmediateAtomicSale,
+    refreshLocalCacheFromCloud
+} from "./cloud-sync.js?v=step6b";
 
 function isVariantProduct(product) {
     return Boolean(product.groupId && product.variantName);
@@ -586,6 +590,14 @@ export function clearCart() {
    Complete sale
 ================================================== */
 
+function createUniqueSaleId() {
+    return (
+        Date.now() * 1000 +
+        Math.floor(Math.random() * 1000)
+    );
+}
+
+
 async function completeSale() {
     const trainingMode = isTrainingUser();
 
@@ -622,10 +634,14 @@ async function completeSale() {
         return;
     }
 
-    const saleRecord = createSaleRecord({
-        ...totals,
-        discountAuthorizedBy: state.currentDiscountAuthorizedBy
-    });
+    const saleRecord = {
+        ...createSaleRecord({
+            ...totals,
+            discountAuthorizedBy:
+                state.currentDiscountAuthorizedBy
+        }),
+        id: createUniqueSaleId()
+    };
 
     const updatedProducts = state.products.map(function (product) {
         const cartItem = state.cart.get(product.id);
@@ -643,6 +659,31 @@ async function completeSale() {
     dom.completeSaleButton.disabled = true;
 
     try {
+        const cloudAttempt =
+            await attemptImmediateAtomicSale(
+                saleRecord
+            );
+
+        if (cloudAttempt.status === "rejected") {
+            await refreshLocalCacheFromCloud()
+                .catch(function () {});
+
+            window.alert(
+                "Sale could not be completed.\n\n" +
+                (
+                    cloudAttempt.code === "INSUFFICIENT_STOCK"
+                        ? "This product has just sold out or no longer has enough stock available on another Till."
+                        : cloudAttempt.message
+                ) +
+                "\n\nThe order has been left in the basket."
+            );
+
+            return;
+        }
+
+        const cloudConfirmed =
+            cloudAttempt.status === "confirmed";
+
         const savedSaleId = await saveCompletedSaleTransaction(
             saleRecord,
             updatedProducts
@@ -678,13 +719,18 @@ async function completeSale() {
                         ...saleRecord,
                         id: savedSaleId
                     },
-                    stockUpdates
+                    stockUpdates,
+                    cloudConfirmed
                 }
             })
         );
 
         window.alert(
-            "Sale completed successfully.\n\n" +
+            (
+                cloudConfirmed
+                    ? "Sale completed successfully.\n\n"
+                    : "Sale completed locally and is waiting to sync.\n\n"
+            ) +
             (totals.discountAmount > 0
                 ? `Subtotal: ${currencyFormatter.format(totals.subtotal)}\n` +
                   `Discount (${totals.discountPercent}%): -${currencyFormatter.format(totals.discountAmount)}\n`
@@ -702,9 +748,21 @@ async function completeSale() {
          * durable cloud operation queue. Refresh UI without creating a second
          * broad product-sync job.
          */
-        announceProductsChanged({
-            saleStockChange: true
-        });
+        announceProductsChanged(
+            cloudConfirmed
+                ? {
+                    cloudConfirmed: true,
+                    saleStockChange: true
+                }
+                : {
+                    saleStockChange: true
+                }
+        );
+
+        if (cloudConfirmed) {
+            await refreshLocalCacheFromCloud()
+                .catch(function () {});
+        }
     } catch (error) {
         console.error("The sale could not be saved:", error);
 

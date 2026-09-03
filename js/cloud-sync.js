@@ -168,9 +168,15 @@ async function cloudRequest(path, options = {}) {
 
     if (!response.ok) {
         const details = await response.text();
-        throw new Error(
+
+        const error = new Error(
             `Cloud request failed (${response.status}). ${details}`
         );
+
+        error.status = response.status;
+        error.details = details;
+
+        throw error;
     }
 
     return response;
@@ -336,11 +342,48 @@ async function processSaleAtomically(operation) {
 }
 
 
+export async function attemptImmediateAtomicSale(sale) {
+    if (!navigator.onLine) {
+        return { status: "deferred" };
+    }
+
+    try {
+        const result =
+            await processSaleAtomically({ sale });
+
+        return {
+            status: "confirmed",
+            result
+        };
+    } catch (error) {
+        const conflict =
+            atomicSaleErrorInfo(error);
+
+        if (conflict) {
+            return {
+                status: "rejected",
+                code: conflict.code,
+                message: conflict.message,
+                error
+            };
+        }
+
+        return {
+            status: "deferred",
+            error
+        };
+    }
+}
+
+
 async function uploadSaleOperationQueue() {
     const operations =
         readOperationQueue()
             .filter(function (operation) {
-                return operation.type === "sale";
+                return (
+                    operation.type === "sale" &&
+                    operation.status !== "conflict"
+                );
             });
 
     for (const operation of operations) {
@@ -441,6 +484,31 @@ async function uploadSaleOperationQueue() {
                     ? error.message
                     : String(error);
 
+            const conflict =
+                atomicSaleErrorInfo(error);
+
+            if (conflict) {
+                updateQueuedOperation(
+                    operation.id,
+                    {
+                        status: "conflict",
+                        conflictCode: conflict.code,
+                        attempts,
+                        lastError: conflict.message,
+                        lastAttemptAt:
+                            new Date().toISOString()
+                    }
+                );
+
+                updateCloudUploadStatus(
+                    `Cloud sync conflict: ${conflict.message} The sale will not retry automatically.`,
+                    true
+                );
+
+                updateCloudUploadCounts();
+                continue;
+            }
+
             updateQueuedOperation(
                 operation.id,
                 {
@@ -452,12 +520,6 @@ async function uploadSaleOperationQueue() {
             );
 
             updateCloudUploadCounts();
-
-            /*
-             * The operation remains durable. The existing retry/backoff system
-             * will try it again later. Because the RPC is transactional, a
-             * failed attempt cannot leave a half-created sale/stock update.
-             */
             continue;
         }
     }
@@ -638,6 +700,53 @@ function pendingOperationCount() {
 }
 
 
+function retryableOperationCount() {
+    return readOperationQueue().filter(function (operation) {
+        return (
+            operation.type === "sale" &&
+            operation.status !== "conflict"
+        );
+    }).length;
+}
+
+function conflictOperationCount() {
+    return readOperationQueue().filter(function (operation) {
+        return (
+            operation.type === "sale" &&
+            operation.status === "conflict"
+        );
+    }).length;
+}
+
+function atomicSaleErrorInfo(error) {
+    const text =
+        `${error?.message || ""} ${error?.details || ""}`;
+
+    const knownConflicts = [
+        ["INSUFFICIENT_STOCK", "This product has just sold out or no longer has enough stock available."],
+        ["PRODUCT_NOT_FOUND", "One of the products in this sale is no longer available."],
+        ["SESSION_NOT_FOUND", "The trading session for this sale no longer exists in the cloud."],
+        ["INVALID_QUANTITY", "The sale contains an invalid product quantity."],
+        ["ITEM_COUNT_MISMATCH", "The sale data did not pass the cloud consistency check."],
+        ["USER_DISABLED", "This account has been disabled."],
+        ["ROLE_NOT_ALLOWED", "This account is not permitted to complete cloud sales."],
+        ["AUTH_REQUIRED", "The cloud session is no longer authorised."]
+    ];
+
+    for (const [code, message] of knownConflicts) {
+        if (text.includes(code)) {
+            return { code, message };
+        }
+    }
+
+    return null;
+}
+
+function hasUnresolvedSaleConflicts() {
+    return conflictOperationCount() > 0;
+}
+
+
 function operationBackoffMs(operation) {
     const attempts =
         Math.max(
@@ -657,6 +766,10 @@ function operationBackoffMs(operation) {
 }
 
 function operationIsReady(operation) {
+    if (operation.status === "conflict") {
+        return false;
+    }
+
     if (!operation.lastAttemptAt) {
         return true;
     }
@@ -677,15 +790,26 @@ function operationIsReady(operation) {
 function queueStatusSummary() {
     const queue = readOperationQueue();
 
+    const retryable =
+        queue.filter(function (operation) {
+            return operation.status !== "conflict";
+        });
+
+    const conflicts =
+        queue.filter(function (operation) {
+            return operation.status === "conflict";
+        });
+
     const lastErrorOperation =
-        [...queue]
+        [...retryable]
             .reverse()
             .find(function (operation) {
                 return Boolean(operation.lastError);
             });
 
     return {
-        count: queue.length,
+        count: retryable.length,
+        conflicts: conflicts.length,
         lastError:
             lastErrorOperation
                 ? lastErrorOperation.lastError
@@ -701,7 +825,7 @@ export function hasPendingCloudChanges() {
         dirty.products ||
         dirty.sessions ||
         dirty.sales ||
-        pendingOperationCount() > 0
+        retryableOperationCount() > 0
     );
 }
 
@@ -737,13 +861,16 @@ export async function refreshLocalCacheFromCloud() {
     try {
         const role = sessionStorage.getItem("merchTillRole") || "";
         const staffMode = role === "staff";
+        const preserveLocalSales =
+            staffMode ||
+            hasUnresolvedSaleConflicts();
 
-        // Staff do not have permission to browse historic sales. They only
-        // need the shared product catalogue and current session to operate
-        // the Till. Admins continue to download the full reporting dataset.
         const productRows = await fetchCloudRows("products");
         const sessionRows = await fetchCloudRows("sessions");
-        const saleRows = staffMode ? null : await fetchCloudRows("sales");
+        const saleRows =
+            preserveLocalSales
+                ? null
+                : await fetchCloudRows("sales");
 
         const products = productRows
             .map(unmapProduct)
@@ -757,7 +884,7 @@ export async function refreshLocalCacheFromCloud() {
 
         let sales = state.sales;
 
-        if (!staffMode) {
+        if (!preserveLocalSales) {
             sales = saleRows
                 .map(unmapSale)
                 .sort(function (first, second) {
@@ -774,7 +901,7 @@ export async function refreshLocalCacheFromCloud() {
         state.products = products;
         state.sessions = sessions;
 
-        if (!staffMode) {
+        if (!preserveLocalSales) {
             state.sales = sales;
         }
 
@@ -790,9 +917,16 @@ export async function refreshLocalCacheFromCloud() {
             minute: "2-digit"
         });
 
-        updateCloudUploadStatus(
-            `Shared cloud data loaded at ${loadedAt}.`
-        );
+        if (hasUnresolvedSaleConflicts()) {
+            updateCloudUploadStatus(
+                `Shared cloud catalogue loaded at ${loadedAt}. A sale sync conflict requires review.`,
+                true
+            );
+        } else {
+            updateCloudUploadStatus(
+                `Shared cloud data loaded at ${loadedAt}.`
+            );
+        }
 
         document.dispatchEvent(
             new CustomEvent("cloud-data-loaded")
@@ -876,6 +1010,11 @@ function updateCloudUploadCounts() {
         }
     }
 
+    if (queueSummary.conflicts > 0) {
+        queueText +=
+            ` · ${queueSummary.conflicts} sync conflict${queueSummary.conflicts === 1 ? "" : "s"} require review`;
+    }
+
     dom.cloudUploadCounts.textContent =
         `${state.products.length} products · ` +
         `${state.sessions.length} sessions · ` +
@@ -899,7 +1038,7 @@ export async function flushPendingCloudSync() {
     }
 
     const dirty = readDirtyState();
-    const hasQueuedSales = pendingOperationCount() > 0;
+    const hasQueuedSales = retryableOperationCount() > 0;
 
     // A queued offline sale is pending work even if the older boolean dirty
     // flags have already been cleared. Previously this early return prevented
@@ -931,17 +1070,17 @@ export async function flushPendingCloudSync() {
              * durable operation queue. The older dirty.products path is kept
              * only for non-sale workflows such as a void until Priority 5.
              */
-            if (pendingOperationCount() > 0) {
+            if (retryableOperationCount() > 0) {
                 await uploadSaleOperationQueue();
             }
 
-            if (dirty.products && pendingOperationCount() === 0) {
+            if (dirty.products && retryableOperationCount() === 0) {
                 await syncStaffProductStockSnapshot();
                 dirty.products = false;
                 writeDirtyState(dirty);
             }
 
-            if (dirty.sales && pendingOperationCount() === 0) {
+            if (dirty.sales && retryableOperationCount() === 0) {
                 dirty.sales = false;
                 writeDirtyState(dirty);
             }
@@ -960,11 +1099,11 @@ export async function flushPendingCloudSync() {
                 writeDirtyState(dirty);
             }
 
-            if (pendingOperationCount() > 0) {
+            if (retryableOperationCount() > 0) {
                 await uploadSaleOperationQueue();
             }
 
-            if (dirty.sales && pendingOperationCount() === 0) {
+            if (dirty.sales && retryableOperationCount() === 0) {
                 // Keep the existing Admin snapshot behaviour only for report
                 // edits such as transaction voids. New sales are owned by the
                 // durable operation queue above.
@@ -1158,11 +1297,11 @@ export function initialiseCloudSync() {
             event.detail.type === "created" &&
             event.detail.sale
         ) {
-            /*
-             * Keep stockUpdates in the durable queue for backwards-compatible
-             * diagnostics, but Step 5A derives sold quantities from sale.items
-             * and sends the sale + deductions to one atomic Supabase RPC.
-             */
+            if (event.detail.cloudConfirmed === true) {
+                updateCloudUploadCounts();
+                return;
+            }
+
             queueSaleOperation(
                 event.detail.sale,
                 event.detail.stockUpdates || []

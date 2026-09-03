@@ -251,8 +251,13 @@ export function saveCompletedSaleTransaction(sale, updatedProducts) {
         // create sale ID 1, 2, 3, etc. A time-based ID avoids those clashes
         // while remaining a safe integer for the Supabase bigint column.
         const uniqueSaleId =
-            (Date.now() * 1000) +
-            Math.floor(Math.random() * 1000);
+            sale.id !== undefined &&
+            sale.id !== null
+                ? Number(sale.id)
+                : (
+                    (Date.now() * 1000) +
+                    Math.floor(Math.random() * 1000)
+                );
 
         const saleWithId = {
             ...sale,
