@@ -59,8 +59,25 @@ function renderCloudUsers() {
             `;
 
         const statusActionMarkup = isMaster
-            ? `<span>Protected</span>`
+            ? `
+                <button
+                    type="button"
+                    class="user-password-button"
+                    data-user-id="${escapeHTML(user.id || "")}"
+                >
+                    Change Password
+                </button>
+                <span>Protected</span>
+            `
             : `
+                <button
+                    type="button"
+                    class="user-password-button"
+                    data-user-id="${escapeHTML(user.id || "")}"
+                >
+                    Change Password
+                </button>
+
                 <button
                     type="button"
                     class="user-status-button"
@@ -371,6 +388,221 @@ async function submitCloudUser(event) {
 
 
 
+
+let passwordChangeTargetUserId = null;
+
+function openPasswordChangeModal(userId) {
+    if (!canManageUsers()) return;
+
+    if (!navigator.onLine) {
+        setUsersStatus(
+            "Users unavailable: Password changes require an internet connection."
+        );
+        return;
+    }
+
+    const targetUser =
+        cloudUsers.find(
+            (user) => user.id === userId
+        );
+
+    if (!targetUser) {
+        setUsersStatus(
+            "Users unavailable: The selected user could not be found."
+        );
+        return;
+    }
+
+    const modal =
+        document.getElementById("password-change-modal");
+
+    const userLabel =
+        document.getElementById("password-change-user-label");
+
+    const newPasswordInput =
+        document.getElementById("new-cloud-password");
+
+    const confirmPasswordInput =
+        document.getElementById("confirm-cloud-password");
+
+    const error =
+        document.getElementById("password-change-error");
+
+    if (
+        !modal ||
+        !userLabel ||
+        !newPasswordInput ||
+        !confirmPasswordInput ||
+        !error
+    ) {
+        return;
+    }
+
+    passwordChangeTargetUserId =
+        targetUser.id;
+
+    userLabel.textContent =
+        `User: ${targetUser.username}`;
+
+    newPasswordInput.value = "";
+    confirmPasswordInput.value = "";
+    error.textContent = "";
+
+    modal.hidden = false;
+    newPasswordInput.focus();
+}
+
+function closePasswordChangeModal() {
+    const modal =
+        document.getElementById("password-change-modal");
+
+    const error =
+        document.getElementById("password-change-error");
+
+    const newPasswordInput =
+        document.getElementById("new-cloud-password");
+
+    const confirmPasswordInput =
+        document.getElementById("confirm-cloud-password");
+
+    if (modal) {
+        modal.hidden = true;
+    }
+
+    if (error) {
+        error.textContent = "";
+    }
+
+    if (newPasswordInput) {
+        newPasswordInput.value = "";
+    }
+
+    if (confirmPasswordInput) {
+        confirmPasswordInput.value = "";
+    }
+
+    passwordChangeTargetUserId = null;
+}
+
+async function submitCloudPasswordChange(event) {
+    event.preventDefault();
+
+    if (!canManageUsers()) return;
+
+    const error =
+        document.getElementById("password-change-error");
+
+    const newPasswordInput =
+        document.getElementById("new-cloud-password");
+
+    const confirmPasswordInput =
+        document.getElementById("confirm-cloud-password");
+
+    if (
+        !error ||
+        !newPasswordInput ||
+        !confirmPasswordInput
+    ) {
+        return;
+    }
+
+    const userId =
+        passwordChangeTargetUserId;
+
+    const password =
+        newPasswordInput.value;
+
+    const confirmPassword =
+        confirmPasswordInput.value;
+
+    error.textContent = "";
+
+    if (!userId) {
+        error.textContent =
+            "The selected user could not be found.";
+        return;
+    }
+
+    if (password.length < 8) {
+        error.textContent =
+            "Password must contain at least 8 characters.";
+        return;
+    }
+
+    if (password !== confirmPassword) {
+        error.textContent =
+            "The passwords do not match.";
+        return;
+    }
+
+    const targetUser =
+        cloudUsers.find(
+            (user) => user.id === userId
+        );
+
+    if (!targetUser) {
+        error.textContent =
+            "The selected user could not be found.";
+        return;
+    }
+
+    const confirmed = window.confirm(
+        `Change the password for "${targetUser.username}"?`
+    );
+
+    if (!confirmed) return;
+
+    const form =
+        document.getElementById("password-change-form");
+
+    const submitButton =
+        form?.querySelector(
+            'button[type="submit"]'
+        );
+
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent =
+            "Changing Password…";
+    }
+
+    try {
+        const data =
+            await callManageUsers(
+                "change-password",
+                {
+                    userId,
+                    password
+                }
+            );
+
+        closePasswordChangeModal();
+
+        setUsersStatus(
+            data?.message ||
+            `Password changed successfully for "${targetUser.username}".`
+        );
+
+    } catch (caughtError) {
+        console.error(
+            "Cloud password could not be changed:",
+            caughtError
+        );
+
+        error.textContent =
+            caughtError instanceof Error
+                ? caughtError.message
+                : String(caughtError);
+
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent =
+                "Change Password";
+        }
+    }
+}
+
 async function changeCloudUserRole(userId, newRole, selectElement) {
     if (!canManageUsers()) return;
 
@@ -562,6 +794,18 @@ export function initialiseUserManagement() {
         dom.usersTableBody.addEventListener(
             "click",
             function (event) {
+                const passwordButton =
+                    event.target.closest(
+                        ".user-password-button"
+                    );
+
+                if (passwordButton) {
+                    openPasswordChangeModal(
+                        passwordButton.dataset.userId
+                    );
+                    return;
+                }
+
                 const button =
                     event.target.closest(
                         ".user-status-button"
@@ -642,6 +886,50 @@ export function initialiseUserManagement() {
         );
     }
 
+    const passwordChangeForm =
+        document.getElementById("password-change-form");
+
+    const closePasswordChangeButton =
+        document.getElementById("close-password-change-modal");
+
+    const cancelPasswordChangeButton =
+        document.getElementById("cancel-password-change");
+
+    const passwordChangeModal =
+        document.getElementById("password-change-modal");
+
+    if (passwordChangeForm) {
+        passwordChangeForm.addEventListener(
+            "submit",
+            submitCloudPasswordChange
+        );
+    }
+
+    if (closePasswordChangeButton) {
+        closePasswordChangeButton.addEventListener(
+            "click",
+            closePasswordChangeModal
+        );
+    }
+
+    if (cancelPasswordChangeButton) {
+        cancelPasswordChangeButton.addEventListener(
+            "click",
+            closePasswordChangeModal
+        );
+    }
+
+    if (passwordChangeModal) {
+        passwordChangeModal.addEventListener(
+            "click",
+            function (event) {
+                if (event.target === passwordChangeModal) {
+                    closePasswordChangeModal();
+                }
+            }
+        );
+    }
+
     window.addEventListener(
         "offline",
         function () {
@@ -651,6 +939,8 @@ export function initialiseUserManagement() {
             ) {
                 closeUserModal();
             }
+
+            closePasswordChangeModal();
 
             setUsersStatus(
                 "Users unavailable: User management requires an internet connection."
