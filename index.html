@@ -1213,7 +1213,88 @@
     </div>
 
 
-    <script type="module" src="js/app.js?v=step1e"></script>
+    
+    <div
+        id="password-change-modal"
+        class="modal"
+        hidden
+    >
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Change Password</h2>
+                <button
+                    type="button"
+                    id="close-password-change-modal"
+                    class="modal-close-button"
+                    aria-label="Close"
+                >
+                    ×
+                </button>
+            </div>
+
+            <form id="password-change-form">
+                <p id="password-change-user-label"></p>
+
+                <div class="form-group">
+                    <label for="new-cloud-password">
+                        New Password
+                    </label>
+
+                    <input
+                        type="password"
+                        id="new-cloud-password"
+                        minlength="8"
+                        maxlength="100"
+                        autocomplete="new-password"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm-cloud-password">
+                        Confirm Password
+                    </label>
+
+                    <input
+                        type="password"
+                        id="confirm-cloud-password"
+                        minlength="8"
+                        maxlength="100"
+                        autocomplete="new-password"
+                        required
+                    >
+                </div>
+
+                <p class="form-help">
+                    Minimum 8 characters. The password is sent securely to Supabase and is not stored locally.
+                </p>
+
+                <p
+                    id="password-change-error"
+                    class="form-error"
+                    aria-live="polite"
+                ></p>
+
+                <div class="modal-actions">
+                    <button
+                        type="button"
+                        id="cancel-password-change"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="add-product-button"
+                    >
+                        Change Password
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+<script type="module" src="js/app.js?v=step1f2"></script>
 
 </body>
 </html>
