@@ -1,6 +1,7 @@
 import { dom } from "./dom.js";
 import { state } from "./state.js";
 import { supabaseConfig } from "./config.js";
+import { isMasterAdmin } from "./permissions.js";
 import { getValidCloudAccessToken, isCloudUsername } from "./auth.js";
 import { replaceCloudDataInDatabase, replaceCloudCatalogueInDatabase } from "./database.js";
 
@@ -380,8 +381,7 @@ export function hasPendingCloudChanges() {
 }
 
 export async function refreshLocalCacheFromCloud() {
-    const username =
-        sessionStorage.getItem("merchTillUsername") || "";
+    const username = sessionStorage.getItem("merchTillUsername") || "";
 
     if (!isCloudUsername(username)) {
         return false;
@@ -395,129 +395,63 @@ export async function refreshLocalCacheFromCloud() {
         return false;
     }
 
-    /*
-     * First try to flush anything genuinely pending.
-     */
     if (hasPendingCloudChanges()) {
         await flushPendingCloudSync();
+
+        if (hasPendingCloudChanges()) {
+            updateCloudUploadStatus(
+                "Cloud download paused because this device still has local changes waiting to upload.",
+                true
+            );
+            return false;
+        }
     }
 
-    const dirtyAfterFlush =
-        readDirtyState();
-
-    const queuedSalesAfterFlush =
-        readPendingSalesQueue();
-
-    const stillHasPendingSales =
-        dirtyAfterFlush.sales ||
-        queuedSalesAfterFlush.length > 0;
-
-    const stillHasPendingStock =
-        dirtyAfterFlush.products ||
-        stillHasPendingSales;
-
-    updateCloudUploadStatus(
-        stillHasPendingStock
-            ? "Loading cloud catalogue while preserving pending local stock changes…"
-            : "Loading shared Till data from the cloud…"
-    );
+    updateCloudUploadStatus("Loading shared Till data from the cloud…");
 
     try {
-        const role =
-            sessionStorage.getItem("merchTillRole") || "";
+        const role = sessionStorage.getItem("merchTillRole") || "";
+        const staffMode = role === "staff";
 
-        const staffMode =
-            role === "staff";
+        // Staff do not have permission to browse historic sales. They only
+        // need the shared product catalogue and current session to operate
+        // the Till. Admins continue to download the full reporting dataset.
+        const productRows = await fetchCloudRows("products");
+        const sessionRows = await fetchCloudRows("sessions");
+        const saleRows = staffMode ? null : await fetchCloudRows("sales");
 
-        /*
-         * Products and sessions are safe to refresh even if a sale is still
-         * queued. When stock is pending, preserve this device's local stock
-         * values for products already cached so an offline sale deduction is
-         * not overwritten by an older cloud stock value.
-         */
-        const productRows =
-            await fetchCloudRows("products");
+        const products = productRows
+            .map(unmapProduct)
+            .sort(compareProducts);
 
-        const sessionRows =
-            await fetchCloudRows("sessions");
+        const sessions = sessionRows
+            .map(unmapSession)
+            .sort(function (first, second) {
+                return second.openedAt.localeCompare(first.openedAt);
+            });
 
-        const cloudProducts =
-            productRows
-                .map(unmapProduct)
-                .sort(compareProducts);
+        let sales = state.sales;
 
-        const products =
-            stillHasPendingStock
-                ? cloudProducts.map(function (cloudProduct) {
-                    const localProduct =
-                        state.products.find(function (product) {
-                            return (
-                                String(product.id) ===
-                                String(cloudProduct.id)
-                            );
-                        });
-
-                    if (!localProduct) {
-                        return cloudProduct;
-                    }
-
-                    return {
-                        ...cloudProduct,
-                        stock:
-                            Number(localProduct.stock) || 0
-                    };
-                })
-                : cloudProducts;
-
-        const sessions =
-            sessionRows
-                .map(unmapSession)
+        if (!staffMode) {
+            sales = saleRows
+                .map(unmapSale)
                 .sort(function (first, second) {
-                    return second.openedAt.localeCompare(
-                        first.openedAt
-                    );
+                    return second.createdAt.localeCompare(first.createdAt);
                 });
 
-        let sales =
-            state.sales;
-
-        /*
-         * Do not replace the local sale cache while any local sale is still
-         * waiting for Supabase acknowledgement.
-         */
-        if (!staffMode && !stillHasPendingSales) {
-            const saleRows =
-                await fetchCloudRows("sales");
-
-            sales =
-                saleRows
-                    .map(unmapSale)
-                    .sort(function (first, second) {
-                        return second.createdAt.localeCompare(
-                            first.createdAt
-                        );
-                    });
-
-            await replaceCloudDataInDatabase(
-                products,
-                sales,
-                sessions
-            );
-
-            state.sales =
-                sales;
+            await replaceCloudDataInDatabase(products, sales, sessions);
         } else {
-            await replaceCloudCatalogueInDatabase(
-                products,
-                sessions
-            );
+            // Preserve the work tablet's local historic sales cache. A new
+            // Staff device receives only the data Staff actually needs.
+            await replaceCloudCatalogueInDatabase(products, sessions);
         }
 
-        state.products =
-            products;
+        state.products = products;
+        state.sessions = sessions;
 
-        state.sessions =
-            sessions;
+        if (!staffMode) {
+            state.sales = sales;
+        }
 
         state.currentSession =
             sessions.find(function (session) {
@@ -526,48 +460,26 @@ export async function refreshLocalCacheFromCloud() {
 
         updateCloudUploadCounts();
 
-        const loadedAt =
-            new Date().toLocaleTimeString(
-                "en-GB",
-                {
-                    hour: "2-digit",
-                    minute: "2-digit"
-                }
-            );
+        const loadedAt = new Date().toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit"
+        });
 
-        if (
-            stillHasPendingStock ||
-            stillHasPendingSales
-        ) {
-            updateCloudUploadStatus(
-                `Cloud catalogue loaded at ${loadedAt}. Some local sale/stock changes are still waiting to sync.`,
-                true
-            );
-        } else {
-            updateCloudUploadStatus(
-                `Shared cloud data loaded at ${loadedAt}.`
-            );
-        }
+        updateCloudUploadStatus(
+            `Shared cloud data loaded at ${loadedAt}.`
+        );
 
         document.dispatchEvent(
-            new CustomEvent(
-                "cloud-data-loaded"
-            )
+            new CustomEvent("cloud-data-loaded")
         );
 
         return true;
-
     } catch (error) {
-        console.warn(
-            "Shared cloud data could not be loaded:",
-            error
-        );
-
+        console.warn("Shared cloud data could not be loaded:", error);
         updateCloudUploadStatus(
             "Cloud data could not be loaded. Showing this device's cached Till data.",
             true
         );
-
         return false;
     }
 }
@@ -751,9 +663,95 @@ export async function flushPendingCloudSync() {
     }
 }
 
+async function uploadExistingTillData() {
+    if (!isMasterAdmin()) {
+        window.alert("Only the Master Admin can upload the Till database to the cloud.");
+        return;
+    }
+
+    const accessToken = await getValidCloudAccessToken();
+
+    if (!accessToken) {
+        window.alert(
+            "A Supabase Master session is required. Log in as master on this device, then try again."
+        );
+        return;
+    }
+
+    updateCloudUploadCounts();
+
+    const shouldUpload = window.confirm(
+        "Upload this device's existing Till data to Supabase?\n\n" +
+        `${state.products.length} products\n` +
+        `${state.sessions.length} sessions\n` +
+        `${state.sales.length} transactions\n\n` +
+        "This copies the data to the cloud. It does not delete or replace the local IndexedDB database. Existing cloud rows with the same IDs will be updated."
+    );
+
+    if (!shouldUpload) {
+        return;
+    }
+
+    dom.uploadCloudDataButton.disabled = true;
+    dom.uploadCloudDataButton.textContent = "Uploading…";
+
+    try {
+        updateCloudUploadStatus("Uploading sessions…");
+        await syncSessionsSnapshot();
+
+        updateCloudUploadStatus("Sessions uploaded. Uploading products…");
+        await syncProductsSnapshot();
+
+        updateCloudUploadStatus("Products uploaded. Uploading transactions…");
+        await syncSalesSnapshot();
+
+        writeDirtyState({
+            products: false,
+            sessions: false,
+            sales: false
+        });
+
+        const completedAt = new Date().toLocaleString("en-GB", {
+            dateStyle: "medium",
+            timeStyle: "short"
+        });
+
+        updateCloudUploadStatus(
+            `Upload complete: ${state.products.length} products, ` +
+            `${state.sessions.length} sessions and ${state.sales.length} transactions. ` +
+            `Completed ${completedAt}. Automatic sync is active on this device.`
+        );
+
+        window.alert(
+            "Cloud upload complete.\n\n" +
+            `Products: ${state.products.length}\n` +
+            `Sessions: ${state.sessions.length}\n` +
+            `Transactions: ${state.sales.length}\n\n` +
+            "Automatic cloud sync is now active on this paired device."
+        );
+    } catch (error) {
+        console.error("Cloud upload failed:", error);
+        updateCloudUploadStatus(
+            "Upload failed. The local Till database is unchanged.",
+            true
+        );
+        window.alert(
+            "The cloud upload could not be completed.\n\n" +
+            "Your local Till database has not been changed.\n\n" +
+            error.message
+        );
+    } finally {
+        dom.uploadCloudDataButton.disabled = false;
+        dom.uploadCloudDataButton.textContent = "Upload Existing Till Data";
+    }
+}
 
 export function initialiseCloudSync() {
     updateCloudUploadCounts();
+
+    if (dom.uploadCloudDataButton) {
+        dom.uploadCloudDataButton.addEventListener("click", uploadExistingTillData);
+    }
 
     document.addEventListener("products-changed", function (event) {
         updateCloudUploadCounts();
