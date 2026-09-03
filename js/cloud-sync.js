@@ -268,10 +268,75 @@ async function syncSessionsSnapshot() {
 }
 
 
-async function uploadSaleOperationQueue() {
-    const role =
-        sessionStorage.getItem("merchTillRole") || "";
 
+async function processSaleAtomically(operation) {
+    const sale =
+        operation.sale;
+
+    const quantities =
+        Array.isArray(sale.items)
+            ? sale.items.map(function (item) {
+                return {
+                    product_id:
+                        Number(item.productId),
+                    quantity:
+                        Number(item.quantity) || 0
+                };
+            })
+            : [];
+
+    if (
+        quantities.length === 0 ||
+        quantities.some(function (item) {
+            return (
+                !Number.isFinite(item.product_id) ||
+                item.quantity <= 0
+            );
+        })
+    ) {
+        throw new Error(
+            "The queued sale does not contain valid product quantities for atomic processing."
+        );
+    }
+
+    const response =
+        await cloudRequest(
+            "rpc/process_sale_atomic",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    "Accept":
+                        "application/json"
+                },
+                body: JSON.stringify({
+                    p_sale:
+                        mapSale(sale),
+                    p_items:
+                        quantities
+                })
+            }
+        );
+
+    const result =
+        await response.json();
+
+    if (
+        !result ||
+        result.success !== true
+    ) {
+        throw new Error(
+            result?.message ||
+            "Supabase did not confirm the atomic sale."
+        );
+    }
+
+    return result;
+}
+
+
+async function uploadSaleOperationQueue() {
     const operations =
         readOperationQueue()
             .filter(function (operation) {
@@ -283,86 +348,72 @@ async function uploadSaleOperationQueue() {
             continue;
         }
 
-        const mappedSale =
-            mapSale(operation.sale);
-
         try {
             /*
-             * Stage 1: confirm the transaction itself. Persist this checkpoint
-             * immediately so a later stock failure does not cause the same
-             * transaction to be inserted again on the next retry.
+             * Queue entries created by Step 4A+ contain the full sale,
+             * including product IDs and sold quantities. Send the whole
+             * operation to one Supabase database function.
+             *
+             * PostgreSQL performs:
+             *   1. sale insert
+             *   2. stock validation
+             *   3. stock deduction
+             * in one transaction. If any part fails, all of it rolls back.
              */
-            if (!operation.saleConfirmed) {
-                if (role === "staff") {
-                    await cloudRequest("sales", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Prefer": "return=minimal"
-                        },
-                        body: JSON.stringify(mappedSale)
-                    });
-                } else {
-                    await upsertRows(
-                        "sales",
-                        [mappedSale]
-                    );
-                }
+            if (!operation.legacy) {
+                await processSaleAtomically(
+                    operation
+                );
 
                 updateQueuedOperation(
                     operation.id,
                     {
                         saleConfirmed: true,
+                        stockConfirmed: true,
                         attempts:
                             Number(operation.attempts || 0),
+                        lastError: null,
+                        confirmedAt:
+                            new Date().toISOString()
+                    }
+                );
+
+                removeQueuedOperation(
+                    operation.id
+                );
+
+                updateCloudUploadCounts();
+                continue;
+            }
+
+            /*
+             * Compatibility path only for a pre-Step-4A sale that was migrated
+             * from the old pending-sales queue. Those records did not retain
+             * exact sold quantities, so they cannot use the atomic RPC safely.
+             * Finish them with the last known working staged behaviour.
+             */
+            const mappedSale =
+                mapSale(operation.sale);
+
+            if (!operation.saleConfirmed) {
+                await upsertRows(
+                    "sales",
+                    [mappedSale]
+                );
+
+                updateQueuedOperation(
+                    operation.id,
+                    {
+                        saleConfirmed: true,
                         lastError: null
                     }
                 );
 
                 operation.saleConfirmed = true;
-                updateCloudUploadCounts();
             }
 
-            /*
-             * Stage 2: apply only the stock rows affected by this sale.
-             * We deliberately do not upload the entire product catalogue.
-             *
-             * Priority 5 will replace these two cloud calls with one atomic
-             * database transaction. For Priority 4, the important guarantee
-             * is that the exact operation survives and resumes from its last
-             * confirmed checkpoint.
-             */
             if (!operation.stockConfirmed) {
-                if (
-                    Array.isArray(operation.stockUpdates) &&
-                    operation.stockUpdates.length > 0
-                ) {
-                    for (const stockUpdate of operation.stockUpdates) {
-                        await cloudRequest(
-                            `products?id=eq.${encodeURIComponent(stockUpdate.id)}`,
-                            {
-                                method: "PATCH",
-                                headers: {
-                                    "Content-Type": "application/json",
-                                    "Prefer": "return=minimal"
-                                },
-                                body: JSON.stringify({
-                                    stock:
-                                        Number(stockUpdate.stock) || 0,
-                                    cloud_updated_at:
-                                        new Date().toISOString()
-                                })
-                            }
-                        );
-                    }
-                } else if (operation.legacy) {
-                    /*
-                     * Migrated Stage-15 queue entries did not contain exact
-                     * stock rows. Use the known working stock-only fallback
-                     * once, then retire the legacy entry.
-                     */
-                    await syncStaffProductStockSnapshot();
-                }
+                await syncStaffProductStockSnapshot();
 
                 updateQueuedOperation(
                     operation.id,
@@ -373,19 +424,13 @@ async function uploadSaleOperationQueue() {
                 );
 
                 operation.stockConfirmed = true;
-                updateCloudUploadCounts();
             }
 
-            if (
-                operation.saleConfirmed &&
-                operation.stockConfirmed
-            ) {
-                removeQueuedOperation(
-                    operation.id
-                );
+            removeQueuedOperation(
+                operation.id
+            );
 
-                updateCloudUploadCounts();
-            }
+            updateCloudUploadCounts();
 
         } catch (error) {
             const attempts =
@@ -409,9 +454,9 @@ async function uploadSaleOperationQueue() {
             updateCloudUploadCounts();
 
             /*
-             * Preserve the failed operation. A different queued operation may
-             * still be able to sync, so continue this pass instead of blocking
-             * the entire queue behind one failure.
+             * The operation remains durable. The existing retry/backoff system
+             * will try it again later. Because the RPC is transactional, a
+             * failed attempt cannot leave a half-created sale/stock update.
              */
             continue;
         }
@@ -1113,6 +1158,11 @@ export function initialiseCloudSync() {
             event.detail.type === "created" &&
             event.detail.sale
         ) {
+            /*
+             * Keep stockUpdates in the durable queue for backwards-compatible
+             * diagnostics, but Step 5A derives sold quantities from sale.items
+             * and sends the sale + deductions to one atomic Supabase RPC.
+             */
             queueSaleOperation(
                 event.detail.sale,
                 event.detail.stockUpdates || []
