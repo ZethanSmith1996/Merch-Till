@@ -654,6 +654,22 @@ async function completeSale() {
             id: savedSaleId
         });
 
+        const stockUpdates =
+            Array.from(state.cart.values()).map(function (cartItem) {
+                const updatedProduct =
+                    updatedProducts.find(function (product) {
+                        return product.id === cartItem.id;
+                    });
+
+                return {
+                    id: cartItem.id,
+                    stock:
+                        updatedProduct
+                            ? updatedProduct.stock
+                            : 0
+                };
+            });
+
         document.dispatchEvent(
             new CustomEvent("sales-changed", {
                 detail: {
@@ -661,7 +677,8 @@ async function completeSale() {
                     sale: {
                         ...saleRecord,
                         id: savedSaleId
-                    }
+                    },
+                    stockUpdates
                 }
             })
         );
@@ -679,7 +696,15 @@ async function completeSale() {
         dom.orderNumberDisplay.textContent = state.currentOrderNumber;
         state.cart.clear();
         clearCurrentDiscount();
-        announceProductsChanged();
+
+        /*
+         * The exact stock changes for this sale are already stored in the
+         * durable cloud operation queue. Refresh UI without creating a second
+         * broad product-sync job.
+         */
+        announceProductsChanged({
+            saleStockChange: true
+        });
     } catch (error) {
         console.error("The sale could not be saved:", error);
 

@@ -7,6 +7,7 @@ import { replaceCloudDataInDatabase, replaceCloudCatalogueInDatabase } from "./d
 
 const CLOUD_DIRTY_KEY = "merchTillCloudDirty";
 const CLOUD_PENDING_SALES_KEY = "merchTillPendingCloudSales";
+const CLOUD_OPERATION_QUEUE_KEY = "merchTillCloudOperationQueueV1";
 let syncTimer = null;
 let syncInProgress = false;
 
@@ -265,33 +266,142 @@ async function syncSessionsSnapshot() {
 }
 
 
-async function uploadPendingSalesQueue() {
-    const role = sessionStorage.getItem("merchTillRole") || "";
-    const pendingSales = readPendingSalesQueue();
+async function uploadSaleOperationQueue() {
+    const role =
+        sessionStorage.getItem("merchTillRole") || "";
 
-    for (const sale of pendingSales) {
-        const mappedSale = mapSale(sale);
-
-        if (role === "staff") {
-            // A brand-new Staff transaction is a normal INSERT. Do not send
-            // the entire historic sales cache and do not use upsert/conflict
-            // resolution. This means the request needs only Staff INSERT
-            // permission.
-            await cloudRequest("sales", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
-                body: JSON.stringify(mappedSale)
+    const operations =
+        readOperationQueue()
+            .filter(function (operation) {
+                return operation.type === "sale";
             });
-        } else {
-            // Admin/Master can safely upsert the exact queued transaction.
-            await upsertRows("sales", [mappedSale]);
-        }
 
-        // Only remove a transaction after Supabase has confirmed success.
-        removePendingSale(sale.id);
+    for (const operation of operations) {
+        const mappedSale =
+            mapSale(operation.sale);
+
+        try {
+            /*
+             * Stage 1: confirm the transaction itself. Persist this checkpoint
+             * immediately so a later stock failure does not cause the same
+             * transaction to be inserted again on the next retry.
+             */
+            if (!operation.saleConfirmed) {
+                if (role === "staff") {
+                    await cloudRequest("sales", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        body: JSON.stringify(mappedSale)
+                    });
+                } else {
+                    await upsertRows(
+                        "sales",
+                        [mappedSale]
+                    );
+                }
+
+                updateQueuedOperation(
+                    operation.id,
+                    {
+                        saleConfirmed: true,
+                        attempts:
+                            Number(operation.attempts || 0),
+                        lastError: null
+                    }
+                );
+
+                operation.saleConfirmed = true;
+            }
+
+            /*
+             * Stage 2: apply only the stock rows affected by this sale.
+             * We deliberately do not upload the entire product catalogue.
+             *
+             * Priority 5 will replace these two cloud calls with one atomic
+             * database transaction. For Priority 4, the important guarantee
+             * is that the exact operation survives and resumes from its last
+             * confirmed checkpoint.
+             */
+            if (!operation.stockConfirmed) {
+                if (
+                    Array.isArray(operation.stockUpdates) &&
+                    operation.stockUpdates.length > 0
+                ) {
+                    for (const stockUpdate of operation.stockUpdates) {
+                        await cloudRequest(
+                            `products?id=eq.${encodeURIComponent(stockUpdate.id)}`,
+                            {
+                                method: "PATCH",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "Prefer": "return=minimal"
+                                },
+                                body: JSON.stringify({
+                                    stock:
+                                        Number(stockUpdate.stock) || 0,
+                                    cloud_updated_at:
+                                        new Date().toISOString()
+                                })
+                            }
+                        );
+                    }
+                } else if (operation.legacy) {
+                    /*
+                     * Migrated Stage-15 queue entries did not contain exact
+                     * stock rows. Use the known working stock-only fallback
+                     * once, then retire the legacy entry.
+                     */
+                    await syncStaffProductStockSnapshot();
+                }
+
+                updateQueuedOperation(
+                    operation.id,
+                    {
+                        stockConfirmed: true,
+                        lastError: null
+                    }
+                );
+
+                operation.stockConfirmed = true;
+            }
+
+            if (
+                operation.saleConfirmed &&
+                operation.stockConfirmed
+            ) {
+                removeQueuedOperation(
+                    operation.id
+                );
+            }
+
+        } catch (error) {
+            const attempts =
+                Number(operation.attempts || 0) + 1;
+
+            const message =
+                error && error.message
+                    ? error.message
+                    : String(error);
+
+            updateQueuedOperation(
+                operation.id,
+                {
+                    attempts,
+                    lastError: message,
+                    lastAttemptAt:
+                        new Date().toISOString()
+                }
+            );
+
+            /*
+             * Preserve this operation and stop this pass. The existing online,
+             * focus, pageshow and interval retry triggers will try again.
+             */
+            throw error;
+        }
     }
 }
 
@@ -324,10 +434,10 @@ async function fetchCloudRows(tableName, select = "*") {
 }
 
 
-function readPendingSalesQueue() {
+function readOperationQueue() {
     try {
         const saved = JSON.parse(
-            localStorage.getItem(CLOUD_PENDING_SALES_KEY) || "[]"
+            localStorage.getItem(CLOUD_OPERATION_QUEUE_KEY) || "[]"
         );
 
         return Array.isArray(saved) ? saved : [];
@@ -336,38 +446,139 @@ function readPendingSalesQueue() {
     }
 }
 
-function writePendingSalesQueue(queue) {
+function writeOperationQueue(queue) {
     localStorage.setItem(
-        CLOUD_PENDING_SALES_KEY,
+        CLOUD_OPERATION_QUEUE_KEY,
         JSON.stringify(queue)
     );
 }
 
-function queuePendingSale(sale) {
+function migrateLegacyPendingSalesQueue() {
+    let legacySales = [];
+
+    try {
+        const saved = JSON.parse(
+            localStorage.getItem(CLOUD_PENDING_SALES_KEY) || "[]"
+        );
+
+        legacySales =
+            Array.isArray(saved)
+                ? saved
+                : [];
+    } catch (error) {
+        legacySales = [];
+    }
+
+    if (legacySales.length === 0) {
+        return;
+    }
+
+    const queue = readOperationQueue();
+    const knownIds = new Set(
+        queue.map(function (operation) {
+            return String(operation.sale?.id ?? operation.id);
+        })
+    );
+
+    legacySales.forEach(function (sale) {
+        if (!sale || sale.id === undefined || sale.id === null) {
+            return;
+        }
+
+        if (knownIds.has(String(sale.id))) {
+            return;
+        }
+
+        queue.push({
+            id: `sale:${sale.id}`,
+            type: "sale",
+            createdAt: new Date().toISOString(),
+            sale,
+            stockUpdates: [],
+            saleConfirmed: false,
+            stockConfirmed: false,
+            attempts: 0,
+            lastError: null,
+            legacy: true
+        });
+    });
+
+    writeOperationQueue(queue);
+
+    /*
+     * Clear the old key only after the entries have been copied into the new
+     * durable operation queue.
+     */
+    localStorage.removeItem(CLOUD_PENDING_SALES_KEY);
+}
+
+function queueSaleOperation(sale, stockUpdates = []) {
     if (!sale || sale.id === undefined || sale.id === null) {
         return;
     }
 
-    const queue = readPendingSalesQueue();
-    const saleId = String(sale.id);
+    const queue = readOperationQueue();
+    const operationId = `sale:${sale.id}`;
 
-    if (queue.some(function (queuedSale) {
-        return String(queuedSale.id) === saleId;
-    })) {
+    if (
+        queue.some(function (operation) {
+            return operation.id === operationId;
+        })
+    ) {
         return;
     }
 
-    queue.push(sale);
-    writePendingSalesQueue(queue);
-}
-
-function removePendingSale(saleId) {
-    const queue = readPendingSalesQueue().filter(function (sale) {
-        return String(sale.id) !== String(saleId);
+    queue.push({
+        id: operationId,
+        type: "sale",
+        createdAt: new Date().toISOString(),
+        sale,
+        stockUpdates:
+            Array.isArray(stockUpdates)
+                ? stockUpdates
+                : [],
+        saleConfirmed: false,
+        stockConfirmed: false,
+        attempts: 0,
+        lastError: null,
+        legacy: false
     });
 
-    writePendingSalesQueue(queue);
+    writeOperationQueue(queue);
 }
+
+function updateQueuedOperation(operationId, changes) {
+    const queue = readOperationQueue();
+
+    const updatedQueue =
+        queue.map(function (operation) {
+            if (operation.id !== operationId) {
+                return operation;
+            }
+
+            return {
+                ...operation,
+                ...changes
+            };
+        });
+
+    writeOperationQueue(updatedQueue);
+}
+
+function removeQueuedOperation(operationId) {
+    writeOperationQueue(
+        readOperationQueue().filter(
+            function (operation) {
+                return operation.id !== operationId;
+            }
+        )
+    );
+}
+
+function pendingOperationCount() {
+    return readOperationQueue().length;
+}
+
 
 export function hasPendingCloudChanges() {
     const dirty = readDirtyState();
@@ -376,7 +587,7 @@ export function hasPendingCloudChanges() {
         dirty.products ||
         dirty.sessions ||
         dirty.sales ||
-        readPendingSalesQueue().length > 0
+        pendingOperationCount() > 0
     );
 }
 
@@ -536,10 +747,15 @@ function updateCloudUploadCounts() {
         return;
     }
 
+    const waiting = pendingOperationCount();
+
     dom.cloudUploadCounts.textContent =
         `${state.products.length} products · ` +
         `${state.sessions.length} sessions · ` +
-        `${state.sales.length} transactions in this device's local database`;
+        `${state.sales.length} transactions in this device's local database` +
+        (waiting > 0
+            ? ` · ${waiting} operation${waiting === 1 ? "" : "s"} waiting to sync`
+            : "");
 }
 
 function scheduleCloudSync() {
@@ -558,7 +774,7 @@ export async function flushPendingCloudSync() {
     }
 
     const dirty = readDirtyState();
-    const hasQueuedSales = readPendingSalesQueue().length > 0;
+    const hasQueuedSales = pendingOperationCount() > 0;
 
     // A queued offline sale is pending work even if the older boolean dirty
     // flags have already been cleared. Previously this early return prevented
@@ -585,21 +801,24 @@ export async function flushPendingCloudSync() {
             // session already exists in Supabase and is only read by Staff.
             // Do not attempt the Admin-only session upsert here.
 
-            // A Staff sale changes stock. PATCH only the stock fields of
-            // existing products rather than upserting/managing the catalogue.
-            if (dirty.products || dirty.sales || hasQueuedSales) {
+            /*
+             * Newly-created sales now carry their exact stock rows inside the
+             * durable operation queue. The older dirty.products path is kept
+             * only for non-sale workflows such as a void until Priority 5.
+             */
+            if (pendingOperationCount() > 0) {
+                await uploadSaleOperationQueue();
+            }
+
+            if (dirty.products && pendingOperationCount() === 0) {
                 await syncStaffProductStockSnapshot();
                 dirty.products = false;
                 writeDirtyState(dirty);
             }
 
-            if (dirty.sales || readPendingSalesQueue().length > 0) {
-                await uploadPendingSalesQueue();
-
-                if (readPendingSalesQueue().length === 0) {
-                    dirty.sales = false;
-                    writeDirtyState(dirty);
-                }
+            if (dirty.sales && pendingOperationCount() === 0) {
+                dirty.sales = false;
+                writeDirtyState(dirty);
             }
         } else {
             // Session management is now cloud-first. Never upload an old
@@ -616,20 +835,17 @@ export async function flushPendingCloudSync() {
                 writeDirtyState(dirty);
             }
 
-            if (readPendingSalesQueue().length > 0) {
-                await uploadPendingSalesQueue();
+            if (pendingOperationCount() > 0) {
+                await uploadSaleOperationQueue();
             }
 
-            if (dirty.sales) {
-                // Keep the existing Admin snapshot behaviour for report edits
-                // such as transaction voids. Newly-created transactions have
-                // already been confirmed individually above.
+            if (dirty.sales && pendingOperationCount() === 0) {
+                // Keep the existing Admin snapshot behaviour only for report
+                // edits such as transaction voids. New sales are owned by the
+                // durable operation queue above.
                 await syncSalesSnapshot();
-
-                if (readPendingSalesQueue().length === 0) {
-                    dirty.sales = false;
-                    writeDirtyState(dirty);
-                }
+                dirty.sales = false;
+                writeDirtyState(dirty);
             }
         }
 
@@ -747,6 +963,7 @@ async function uploadExistingTillData() {
 }
 
 export function initialiseCloudSync() {
+    migrateLegacyPendingSalesQueue();
     updateCloudUploadCounts();
 
     if (dom.uploadCloudDataButton) {
@@ -767,7 +984,10 @@ export function initialiseCloudSync() {
          */
         if (
             event.detail &&
-            event.detail.cloudConfirmed === true
+            (
+                event.detail.cloudConfirmed === true ||
+                event.detail.saleStockChange === true
+            )
         ) {
             return;
         }
@@ -776,16 +996,27 @@ export function initialiseCloudSync() {
     });
 
     document.addEventListener("sales-changed", function (event) {
-        updateCloudUploadCounts();
-
         if (
             event.detail &&
             event.detail.type === "created" &&
             event.detail.sale
         ) {
-            queuePendingSale(event.detail.sale);
+            queueSaleOperation(
+                event.detail.sale,
+                event.detail.stockUpdates || []
+            );
+
+            updateCloudUploadCounts();
+            scheduleCloudSync();
+            return;
         }
 
+        /*
+         * Non-created sale changes (currently voiding) continue through the
+         * transitional dirty path until Priority 5 moves those operations to
+         * the same server-side transaction model.
+         */
+        updateCloudUploadCounts();
         markDirty({ products: true, sales: true });
     });
 

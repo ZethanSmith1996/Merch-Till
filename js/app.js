@@ -18,7 +18,7 @@ import {
     renderCart,
     renderTillProducts,
     refreshTillAvailability
-} from "./till.js";
+} from "./till.js?v=step4a";
 import {
     initialiseSessions,
     renderSessionStatus,
@@ -32,7 +32,7 @@ import {
     initialiseUserManagement,
     renderUsersTable
 } from "./users.js?v=step1f2";
-import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=step3c";
+import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=step4a";
 
 function refreshProductDisplays() {
     renderTillProducts();
