@@ -1,10 +1,10 @@
-import { initialiseAuthentication, validateSavedSession, isCloudUsername } from "./auth.js?v=step1d2";
+import { initialiseAuthentication, validateSavedSession, isCloudUsername } from "./auth.js?v=step1e";
 import {
     initialiseProductDatabase,
     initialiseUsersDatabase,
     loadSalesFromDatabase,
     loadSessionsFromDatabase
-} from "./database.js";
+} from "./database.js?v=step1e";
 import {
     initialiseNavigation,
     applyNavigationPermissions

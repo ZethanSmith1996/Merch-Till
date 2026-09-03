@@ -1,7 +1,7 @@
 import { dom } from "./dom.js";
 import { state } from "./state.js";
 import { clearCart } from "./till.js";
-import { supabaseConfig } from "./config.js";
+import { supabaseConfig } from "./config.js?v=step1e";
 
 const CLOUD_ACCESS_TOKEN_KEY = "merchTillCloudAccessToken";
 const CLOUD_REFRESH_TOKEN_KEY = "merchTillCloudRefreshToken";
@@ -402,8 +402,16 @@ export async function validateSavedSession() {
         }
     }
 
+    /*
+     * Only Training Mode can reach this local-session path.
+     * All operational users are restored from their Supabase session above.
+     */
     const user = state.users.find(function (item) {
-        return item.username === savedUsername && item.active;
+        return (
+            normaliseCloudUsername(item.username) === "training" &&
+            item.username === savedUsername &&
+            item.active
+        );
     });
 
     if (!user) {

@@ -1,4 +1,4 @@
-import { bootstrapUsers, defaultProducts } from "./config.js";
+import { localTrainingUser, defaultProducts } from "./config.js?v=step1e";
 import { state } from "./state.js";
 
 const databaseName = "MerchTillDatabase";
@@ -447,9 +447,22 @@ export function loadUsersFromDatabase() {
         const request = transaction.objectStore("users").getAll();
 
         request.onsuccess = function () {
-            state.users = request.result.sort(function (first, second) {
-                return first.username.localeCompare(second.username);
-            });
+            /*
+             * The local users store exists only for Training Mode now.
+             * Operational users are never read from IndexedDB.
+             */
+            state.users = request.result
+                .filter(function (user) {
+                    return (
+                        String(user.username || "")
+                            .trim()
+                            .toLowerCase() === "training"
+                    );
+                })
+                .sort(function (first, second) {
+                    return first.username.localeCompare(second.username);
+                });
+
             resolve(state.users);
         };
 
@@ -459,60 +472,83 @@ export function loadUsersFromDatabase() {
     });
 }
 
-function addBootstrapUsersToDatabase() {
-    return new Promise(function (resolve, reject) {
-        const transaction = state.database.transaction("users", "readwrite");
-        const store = transaction.objectStore("users");
+export async function initialiseUsersDatabase() {
+    /*
+     * Migration cleanup:
+     * remove every legacy local operational account/password, leaving only
+     * the deliberately local Training account.
+     */
+    await new Promise(function (resolve, reject) {
+        const transaction =
+            state.database.transaction("users", "readwrite");
 
-        bootstrapUsers.forEach(function (user) {
-            store.add({ ...user });
-        });
+        const store =
+            transaction.objectStore("users");
+
+        const request =
+            store.getAll();
+
+        request.onsuccess = function () {
+            const users =
+                Array.isArray(request.result)
+                    ? request.result
+                    : [];
+
+            let trainingRecord = null;
+
+            users.forEach(function (user) {
+                const username =
+                    String(user.username || "")
+                        .trim()
+                        .toLowerCase();
+
+                if (username === "training") {
+                    trainingRecord = user;
+                    return;
+                }
+
+                /*
+                 * This removes old Master/Admin/Staff passwords from the
+                 * device's IndexedDB. Those accounts now live in Supabase.
+                 */
+                if (user.id !== undefined) {
+                    store.delete(user.id);
+                }
+            });
+
+            const synchronisedTrainingUser = {
+                ...(trainingRecord || {}),
+                ...localTrainingUser
+            };
+
+            if (trainingRecord?.id !== undefined) {
+                synchronisedTrainingUser.id =
+                    trainingRecord.id;
+            }
+
+            store.put(synchronisedTrainingUser);
+        };
+
+        request.onerror = function () {
+            reject(request.error);
+        };
 
         transaction.oncomplete = resolve;
+
         transaction.onerror = function () {
             reject(transaction.error);
         };
-    });
-}
 
-export function saveUserToDatabase(user) {
-    return new Promise(function (resolve, reject) {
-        const transaction = state.database.transaction("users", "readwrite");
-        const request = transaction.objectStore("users").put(user);
-
-        request.onsuccess = function () {
-            resolve(request.result);
-        };
-        request.onerror = function () {
-            reject(request.error);
+        transaction.onabort = function () {
+            reject(
+                transaction.error ||
+                new Error("Local user cleanup was aborted.")
+            );
         };
     });
-}
 
-export function addUserToDatabase(user) {
-    return new Promise(function (resolve, reject) {
-        const transaction = state.database.transaction("users", "readwrite");
-        const request = transaction.objectStore("users").add(user);
-
-        request.onsuccess = function () {
-            resolve(request.result);
-        };
-        request.onerror = function () {
-            reject(request.error);
-        };
-    });
-}
-
-export function deleteUserFromDatabase(userId) {
-    return new Promise(function (resolve, reject) {
-        const transaction = state.database.transaction("users", "readwrite");
-        const request = transaction.objectStore("users").delete(userId);
-
-        request.onsuccess = resolve;
-        request.onerror = function () {
-            reject(request.error);
-        };
-    });
+    await loadUsersFromDatabase();
+    return state.users;
 }
 
 export async function initialiseProductDatabase() {
@@ -527,75 +563,4 @@ export async function initialiseProductDatabase() {
     return state.products;
 }
 
-export async function initialiseUsersDatabase() {
-    await loadUsersFromDatabase();
 
-    if (state.users.length === 0) {
-        await addBootstrapUsersToDatabase();
-        await loadUsersFromDatabase();
-        return state.users;
-    }
-
-    const transaction = state.database.transaction("users", "readwrite");
-    const store = transaction.objectStore("users");
-    let changed = false;
-
-    bootstrapUsers.forEach(function (bootstrapUser) {
-        const existingUser = state.users.find(function (user) {
-            return (
-                user.username.toLowerCase() ===
-                bootstrapUser.username.toLowerCase()
-            );
-        });
-
-        if (existingUser) {
-            const synchronisedUser = {
-                ...existingUser,
-                username: bootstrapUser.username,
-                password: bootstrapUser.password,
-                role: bootstrapUser.role,
-                active: bootstrapUser.active,
-                protected: bootstrapUser.protected
-            };
-
-            const needsUpdate =
-                existingUser.username !== synchronisedUser.username ||
-                existingUser.password !== synchronisedUser.password ||
-                existingUser.role !== synchronisedUser.role ||
-                existingUser.active !== synchronisedUser.active ||
-                existingUser.protected !== synchronisedUser.protected;
-
-            if (needsUpdate) {
-                store.put(synchronisedUser);
-                changed = true;
-            }
-
-            return;
-        }
-
-        store.add({ ...bootstrapUser });
-        changed = true;
-    });
-
-    if (!changed) {
-        transaction.abort();
-        return state.users;
-    }
-
-    await new Promise(function (resolve, reject) {
-        transaction.oncomplete = resolve;
-        transaction.onerror = function () {
-            reject(transaction.error);
-        };
-        transaction.onabort = function () {
-            if (transaction.error) {
-                reject(transaction.error);
-                return;
-            }
-            resolve();
-        };
-    });
-
-    await loadUsersFromDatabase();
-    return state.users;
-}
