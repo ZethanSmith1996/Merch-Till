@@ -4,6 +4,10 @@ export function escapeHTML(value) {
     return temporaryElement.innerHTML;
 }
 
-export function announceProductsChanged() {
-    document.dispatchEvent(new CustomEvent("products-changed"));
+export function announceProductsChanged(detail = null) {
+    document.dispatchEvent(
+        new CustomEvent("products-changed", {
+            detail
+        })
+    );
 }

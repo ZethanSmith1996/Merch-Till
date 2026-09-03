@@ -4,7 +4,7 @@ import {
     initialiseUsersDatabase,
     loadSalesFromDatabase,
     loadSessionsFromDatabase
-} from "./database.js?v=step3a1";
+} from "./database.js?v=step3b";
 import {
     initialiseNavigation,
     applyNavigationPermissions
@@ -12,7 +12,7 @@ import {
 import {
     initialiseProductManagement,
     renderProductsTable
-} from "./products.js";
+} from "./products.js?v=step3b";
 import {
     initialiseTill,
     renderCart,
@@ -32,7 +32,7 @@ import {
     initialiseUserManagement,
     renderUsersTable
 } from "./users.js?v=step1f2";
-import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js";
+import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=step3b";
 
 function refreshProductDisplays() {
     renderTillProducts();

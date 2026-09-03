@@ -1,4 +1,4 @@
-import { localTrainingUser } from "./config.js?v=step3a1";
+import { localTrainingUser } from "./config.js?v=step3b";
 import { state } from "./state.js";
 
 const databaseName = "MerchTillDatabase";
@@ -98,6 +98,45 @@ export function loadProductsFromDatabase() {
 
         request.onerror = function () {
             reject(request.error);
+        };
+    });
+}
+
+
+
+export function replaceProductCacheInDatabase(products) {
+    return new Promise(function (resolve, reject) {
+        const transaction =
+            state.database.transaction("products", "readwrite");
+
+        const store =
+            transaction.objectStore("products");
+
+        const clearRequest = store.clear();
+
+        clearRequest.onerror = function () {
+            reject(clearRequest.error);
+        };
+
+        clearRequest.onsuccess = function () {
+            products.forEach(function (product) {
+                store.put(product);
+            });
+        };
+
+        transaction.oncomplete = function () {
+            resolve(products);
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error);
+        };
+
+        transaction.onabort = function () {
+            reject(
+                transaction.error ||
+                new Error("Product cache replacement aborted.")
+            );
         };
     });
 }

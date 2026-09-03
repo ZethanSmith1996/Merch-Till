@@ -753,8 +753,25 @@ export function initialiseCloudSync() {
         dom.uploadCloudDataButton.addEventListener("click", uploadExistingTillData);
     }
 
-    document.addEventListener("products-changed", function () {
+    document.addEventListener("products-changed", function (event) {
         updateCloudUploadCounts();
+
+        /*
+         * Product-management writes are now cloud-first. Once Supabase has
+         * confirmed an Add/Edit/Delete/Reorder operation, this event only
+         * refreshes the UI and must not trigger the legacy whole-catalogue
+         * snapshot uploader.
+         *
+         * Stock changes created by sales/voids still use the existing dirty
+         * mechanism until the atomic sale/stock roadmap stage.
+         */
+        if (
+            event.detail &&
+            event.detail.cloudConfirmed === true
+        ) {
+            return;
+        }
+
         markDirty({ products: true });
     });
 

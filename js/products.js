@@ -1,26 +1,264 @@
-import { currencyFormatter } from "./config.js";
+import { currencyFormatter, supabaseConfig } from "./config.js?v=step3b";
 import {
-    deleteProductFromDatabase,
-    deleteProductsFromDatabase,
-    saveProductToDatabase,
-    saveProductsToDatabase,
-    replaceProductsInDatabase
-} from "./database.js";
+    replaceProductCacheInDatabase
+} from "./database.js?v=step3b";
 import { dom } from "./dom.js";
 import { state } from "./state.js";
+import { getValidCloudAccessToken } from "./auth.js?v=step3b";
 import { announceProductsChanged, escapeHTML } from "./utils.js";
 
-function getNextProductId() {
-    if (state.products.length === 0) {
+function getNextProductId(products = state.products) {
+    if (products.length === 0) {
         return 1;
     }
 
     return Math.max(
-        ...state.products.map(function (product) {
-            return product.id;
+        ...products.map(function (product) {
+            return Number(product.id) || 0;
         })
     ) + 1;
 }
+
+
+function productManagementIsOnline() {
+    return navigator.onLine;
+}
+
+function setProductCloudStatus(message, isError = false) {
+    const status =
+        document.getElementById("product-cloud-status");
+
+    if (!status) return;
+
+    status.textContent = message;
+    status.classList.toggle(
+        "cloud-upload-error",
+        isError
+    );
+}
+
+function requireOnlineProductManagement() {
+    if (productManagementIsOnline()) {
+        return true;
+    }
+
+    setProductCloudStatus(
+        "Product management is unavailable offline. Sales can continue using the cached catalogue.",
+        true
+    );
+
+    window.alert(
+        "Product management requires an internet connection.\n\n" +
+        "Sales can continue using the cached product catalogue."
+    );
+
+    return false;
+}
+
+async function productCloudRequest(path, options = {}) {
+    if (!navigator.onLine) {
+        throw new Error(
+            "Product management requires an internet connection."
+        );
+    }
+
+    const accessToken =
+        await getValidCloudAccessToken();
+
+    if (!accessToken) {
+        throw new Error(
+            "No valid cloud session is available. Log out and log back in while online."
+        );
+    }
+
+    const response = await fetch(
+        `${supabaseConfig.url}/rest/v1/${path}`,
+        {
+            ...options,
+            headers: {
+                "apikey":
+                    supabaseConfig.publishableKey,
+                "Authorization":
+                    `Bearer ${accessToken}`,
+                ...(options.headers || {})
+            }
+        }
+    );
+
+    if (!response.ok) {
+        const details =
+            await response.text();
+
+        throw new Error(
+            `Cloud product request failed (${response.status}). ${details}`
+        );
+    }
+
+    return response;
+}
+
+function mapProductForCloud(product) {
+    return {
+        id: product.id,
+        name: product.name,
+        price: Number(product.price) || 0,
+        stock: Number(product.stock) || 0,
+        group_id: product.groupId || null,
+        variant_name: product.variantName || null,
+        variant_order:
+            Number.isFinite(product.variantOrder)
+                ? product.variantOrder
+                : null,
+        sort_order:
+            Number.isFinite(product.sortOrder)
+                ? product.sortOrder
+                : null,
+        tile_color:
+            product.tileColor || "default",
+        cloud_updated_at:
+            new Date().toISOString()
+    };
+}
+
+function unmapCloudProduct(row) {
+    return {
+        id: Number(row.id),
+        name: row.name,
+        price: Number(row.price) || 0,
+        stock: Number(row.stock) || 0,
+        ...(row.group_id
+            ? { groupId: row.group_id }
+            : {}),
+        ...(row.variant_name
+            ? { variantName: row.variant_name }
+            : {}),
+        ...(row.variant_order !== null &&
+        row.variant_order !== undefined
+            ? {
+                variantOrder:
+                    Number(row.variant_order)
+            }
+            : {}),
+        ...(row.sort_order !== null &&
+        row.sort_order !== undefined
+            ? {
+                sortOrder:
+                    Number(row.sort_order)
+            }
+            : {}),
+        tileColor:
+            row.tile_color || "default"
+    };
+}
+
+async function fetchAuthoritativeCloudProducts() {
+    const response =
+        await productCloudRequest(
+            "products?select=*&order=sort_order.asc,id.asc",
+            {
+                method: "GET",
+                headers: {
+                    "Accept": "application/json"
+                }
+            }
+        );
+
+    const rows = await response.json();
+
+    return rows
+        .map(unmapCloudProduct)
+        .sort(compareProductsForDisplay);
+}
+
+async function upsertCloudProducts(productsToSave) {
+    if (productsToSave.length === 0) {
+        return;
+    }
+
+    await productCloudRequest(
+        "products?on_conflict=id",
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Prefer":
+                    "resolution=merge-duplicates,return=minimal"
+            },
+            body: JSON.stringify(
+                productsToSave.map(
+                    mapProductForCloud
+                )
+            )
+        }
+    );
+}
+
+async function deleteCloudProducts(productIds) {
+    for (const productId of productIds) {
+        await productCloudRequest(
+            `products?id=eq.${encodeURIComponent(productId)}`,
+            {
+                method: "DELETE",
+                headers: {
+                    "Prefer": "return=minimal"
+                }
+            }
+        );
+    }
+}
+
+async function refreshProductCacheFromCloud() {
+    const products =
+        await fetchAuthoritativeCloudProducts();
+
+    await replaceProductCacheInDatabase(products);
+
+    state.products = products;
+
+    /*
+     * This event is for UI refresh only. The cloud is already authoritative,
+     * so cloud-sync must not interpret it as a new catalogue write.
+     */
+    announceProductsChanged({
+        cloudConfirmed: true
+    });
+
+    setProductCloudStatus(
+        "Products are synced with Supabase."
+    );
+
+    return products;
+}
+
+function updateProductManagementAvailability() {
+    const online =
+        productManagementIsOnline();
+
+    if (dom.addProductButton) {
+        dom.addProductButton.disabled = !online;
+    }
+
+    if (!online) {
+        if (
+            dom.productModal &&
+            !dom.productModal.hidden
+        ) {
+            closeProductModal();
+        }
+
+        setProductCloudStatus(
+            "Product management is unavailable offline. Sales can continue using the cached catalogue.",
+            true
+        );
+    } else {
+        setProductCloudStatus(
+            "Product management is online. Supabase is the source of truth."
+        );
+    }
+
+    renderProductsTable();
+}
+
 
 function createGroupId() {
     if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
@@ -73,8 +311,18 @@ function compareProductsForDisplay(first, second) {
     return first.id - second.id;
 }
 
-function getNextSortOrder() {
+function getNextSortOrder(products = state.products) {
+    const originalProducts = state.products;
+
+    if (products !== state.products) {
+        state.products = products;
+    }
+
     const rows = getGroupedRows();
+
+    if (products !== originalProducts) {
+        state.products = originalProducts;
+    }
 
     if (rows.length === 0) {
         return 1;
@@ -186,10 +434,19 @@ function renderSingleProductRow(product) {
 
     const moveUpButton = tableRow.querySelector(".move-product-up");
     const moveDownButton = tableRow.querySelector(".move-product-down");
+    const editButton = tableRow.querySelector(".edit-product-button");
+    const deleteButton = tableRow.querySelector(".delete-product-button");
+    const offline = !productManagementIsOnline();
 
-    moveUpButton.disabled = singleRowIndex <= 0;
+    moveUpButton.disabled =
+        offline || singleRowIndex <= 0;
     moveDownButton.disabled =
-        singleRowIndex < 0 || singleRowIndex >= singleRows.length - 1;
+        offline ||
+        singleRowIndex < 0 ||
+        singleRowIndex >= singleRows.length - 1;
+
+    editButton.disabled = offline;
+    deleteButton.disabled = offline;
 
     moveUpButton.addEventListener("click", function () {
         moveProductRow(singleRowIndex, -1);
@@ -280,10 +537,19 @@ function renderVariantGroupRow(groupId, groupProducts) {
 
     const moveUpButton = tableRow.querySelector(".move-product-up");
     const moveDownButton = tableRow.querySelector(".move-product-down");
+    const editButton = tableRow.querySelector(".edit-product-button");
+    const deleteButton = tableRow.querySelector(".delete-product-button");
+    const offline = !productManagementIsOnline();
 
-    moveUpButton.disabled = groupRowIndex <= 0;
+    moveUpButton.disabled =
+        offline || groupRowIndex <= 0;
     moveDownButton.disabled =
-        groupRowIndex < 0 || groupRowIndex >= groupedRows.length - 1;
+        offline ||
+        groupRowIndex < 0 ||
+        groupRowIndex >= groupedRows.length - 1;
+
+    editButton.disabled = offline;
+    deleteButton.disabled = offline;
 
     moveUpButton.addEventListener("click", function () {
         moveProductRow(groupRowIndex, -1);
@@ -309,46 +575,94 @@ function renderVariantGroupRow(groupId, groupProducts) {
 }
 
 async function moveProductRow(rowIndex, direction) {
-    const rows = getGroupedRows();
-    const targetIndex = rowIndex + direction;
-
-    if (
-        rowIndex < 0 ||
-        rowIndex >= rows.length ||
-        targetIndex < 0 ||
-        targetIndex >= rows.length
-    ) {
+    if (!requireOnlineProductManagement()) {
         return;
     }
 
-    const reorderedRows = [...rows];
-    const [movedRow] = reorderedRows.splice(rowIndex, 1);
-    reorderedRows.splice(targetIndex, 0, movedRow);
+    try {
+        /*
+         * Refresh first so reordering is based on the current cloud catalogue,
+         * not a potentially stale IndexedDB snapshot.
+         */
+        const authoritativeProducts =
+            await fetchAuthoritativeCloudProducts();
 
-    const productsToSave = [];
+        state.products =
+            authoritativeProducts;
 
-    reorderedRows.forEach(function (row, index) {
-        const sortOrder = index + 1;
+        const rows = getGroupedRows();
+        const targetIndex =
+            rowIndex + direction;
 
-        if (row.type === "single") {
-            row.product.sortOrder = sortOrder;
-            productsToSave.push(row.product);
+        if (
+            rowIndex < 0 ||
+            rowIndex >= rows.length ||
+            targetIndex < 0 ||
+            targetIndex >= rows.length
+        ) {
+            await refreshProductCacheFromCloud();
             return;
         }
 
-        row.products.forEach(function (product) {
-            product.sortOrder = sortOrder;
-            productsToSave.push(product);
-        });
-    });
+        const reorderedRows = [...rows];
+        const [movedRow] =
+            reorderedRows.splice(rowIndex, 1);
 
-    try {
-        await saveProductsToDatabase(productsToSave);
-        state.products.sort(compareProductsForDisplay);
-        announceProductsChanged();
+        reorderedRows.splice(
+            targetIndex,
+            0,
+            movedRow
+        );
+
+        const productsToSave = [];
+
+        reorderedRows.forEach(
+            function (row, index) {
+                const sortOrder =
+                    index + 1;
+
+                if (row.type === "single") {
+                    productsToSave.push({
+                        ...row.product,
+                        sortOrder
+                    });
+                    return;
+                }
+
+                row.products.forEach(
+                    function (product) {
+                        productsToSave.push({
+                            ...product,
+                            sortOrder
+                        });
+                    }
+                );
+            }
+        );
+
+        setProductCloudStatus(
+            "Saving product order to Supabase…"
+        );
+
+        await upsertCloudProducts(
+            productsToSave
+        );
+
+        await refreshProductCacheFromCloud();
+
     } catch (error) {
-        console.error("Product order could not be saved:", error);
-        window.alert("The product order could not be saved.");
+        console.error(
+            "Product order could not be saved:",
+            error
+        );
+
+        await refreshProductCacheFromCloud()
+            .catch(function () {});
+
+        window.alert(
+            "The product order could not be saved.\n\n" +
+            (error.message || error)
+        );
     }
 }
 
@@ -418,6 +732,10 @@ function clearVariantRows() {
 }
 
 function openAddProductModal() {
+    if (!requireOnlineProductManagement()) {
+        return;
+    }
+
     dom.productForm.reset();
     dom.editingProductIdInput.value = "";
     dom.editingProductGroupIdInput.value = "";
@@ -431,6 +749,10 @@ function openAddProductModal() {
 }
 
 function openEditProductModal(productId) {
+    if (!requireOnlineProductManagement()) {
+        return;
+    }
+
     const product = state.products.find(function (item) {
         return item.id === productId;
     });
@@ -554,218 +876,361 @@ function validateVariants(variants) {
 async function saveProduct(event) {
     event.preventDefault();
 
-    const name = dom.productNameInput.value.trim();
-    const price = Number(dom.productPriceInput.value);
-    const tileColor = dom.productTileColorInput.value || "default";
-    const editingProductId = Number(dom.editingProductIdInput.value) || null;
-    const editingProductGroupId = dom.editingProductGroupIdInput.value || "";
-    const hasVariants = dom.productHasVariantsInput.checked;
-
-    const existingAffectedProducts = editingProductGroupId
-        ? productsInGroup(editingProductGroupId)
-        : editingProductId
-          ? state.products.filter(function (product) {
-                return product.id === editingProductId;
-            })
-          : [];
-
-    const editingIds = new Set(
-        existingAffectedProducts.map(function (product) {
-            return product.id;
-        })
-    );
-
-    const baseError = validateBaseProduct(name, price, editingIds);
-
-    if (baseError) {
-        dom.productFormError.textContent = baseError;
+    if (!requireOnlineProductManagement()) {
         return;
     }
 
-    try {
-        if (!hasVariants) {
-            const stock = Number(dom.productStockInput.value);
+    const name =
+        dom.productNameInput.value.trim();
 
-            if (!Number.isInteger(stock) || stock < 0) {
+    const price =
+        Number(dom.productPriceInput.value);
+
+    const tileColor =
+        dom.productTileColorInput.value ||
+        "default";
+
+    const editingProductId =
+        Number(
+            dom.editingProductIdInput.value
+        ) || null;
+
+    const editingProductGroupId =
+        dom.editingProductGroupIdInput.value ||
+        "";
+
+    const hasVariants =
+        dom.productHasVariantsInput.checked;
+
+    dom.productFormError.textContent = "";
+
+    try {
+        /*
+         * Always base catalogue edits on Supabase's current version.
+         */
+        const authoritativeProducts =
+            await fetchAuthoritativeCloudProducts();
+
+        state.products =
+            authoritativeProducts;
+
+        const existingAffectedProducts =
+            editingProductGroupId
+                ? productsInGroup(
+                    editingProductGroupId
+                )
+                : editingProductId
+                  ? state.products.filter(
+                        function (product) {
+                            return (
+                                product.id ===
+                                editingProductId
+                            );
+                        }
+                    )
+                  : [];
+
+        const editingIds =
+            new Set(
+                existingAffectedProducts.map(
+                    function (product) {
+                        return product.id;
+                    }
+                )
+            );
+
+        const baseError =
+            validateBaseProduct(
+                name,
+                price,
+                editingIds
+            );
+
+        if (baseError) {
+            dom.productFormError.textContent =
+                baseError;
+            return;
+        }
+
+        let productsToSave = [];
+        let productIdsToDelete = [];
+        let cartIdsToRemove = [];
+
+        if (!hasVariants) {
+            const stock =
+                Number(
+                    dom.productStockInput.value
+                );
+
+            if (
+                !Number.isInteger(stock) ||
+                stock < 0
+            ) {
                 dom.productFormError.textContent =
                     "Stock must be a whole number of zero or more.";
                 return;
             }
 
             if (editingProductGroupId) {
-                const groupProducts = productsInGroup(editingProductGroupId);
-                const keptProduct = groupProducts[0];
-                const removedIds = groupProducts.slice(1).map(function (product) {
-                    return product.id;
-                });
+                const groupProducts =
+                    productsInGroup(
+                        editingProductGroupId
+                    );
 
-                const collapsedProduct = {
+                const keptProduct =
+                    groupProducts[0];
+
+                if (!keptProduct) {
+                    throw new Error(
+                        "The cloud product group could not be found."
+                    );
+                }
+
+                productsToSave = [{
                     ...keptProduct,
-                    id: keptProduct.id,
-                    name: name,
-                    price: price,
-                    stock: stock,
+                    name,
+                    price,
+                    stock,
                     groupId: undefined,
                     variantName: undefined,
                     variantOrder: undefined,
-                    sortOrder: getProductSortOrder(keptProduct),
-                    tileColor: tileColor
-                };
+                    sortOrder:
+                        getProductSortOrder(
+                            keptProduct
+                        ),
+                    tileColor
+                }];
 
-                await replaceProductsInDatabase(
-                    [collapsedProduct],
-                    removedIds
-                );
+                productIdsToDelete =
+                    groupProducts
+                        .slice(1)
+                        .map(function (product) {
+                            return product.id;
+                        });
 
-                removeProductsFromCart(groupProducts.map(function (product) {
-                    return product.id;
-                }));
+                cartIdsToRemove =
+                    groupProducts.map(
+                        function (product) {
+                            return product.id;
+                        }
+                    );
 
-                state.products = state.products.filter(function (product) {
-                    return !groupProducts.some(function (groupProduct) {
-                        return groupProduct.id === product.id;
-                    });
-                });
-                state.products.push(collapsedProduct);
             } else if (editingProductId) {
-                const product = state.products.find(function (item) {
-                    return item.id === editingProductId;
-                });
+                const product =
+                    state.products.find(
+                        function (item) {
+                            return (
+                                item.id ===
+                                editingProductId
+                            );
+                        }
+                    );
 
                 if (!product) {
-                    dom.productFormError.textContent =
-                        "The product could not be found.";
-                    return;
+                    throw new Error(
+                        "The cloud product could not be found."
+                    );
                 }
 
-                const updatedProduct = {
+                productsToSave = [{
                     ...product,
-                    id: product.id,
-                    name: name,
-                    price: price,
-                    stock: stock,
-                    sortOrder: getProductSortOrder(product),
-                    tileColor: tileColor
-                };
+                    name,
+                    price,
+                    stock,
+                    sortOrder:
+                        getProductSortOrder(
+                            product
+                        ),
+                    tileColor
+                }];
 
-                await saveProductToDatabase(updatedProduct);
-                removeProductsFromCart([product.id]);
-                Object.assign(product, updatedProduct);
+                cartIdsToRemove = [
+                    product.id
+                ];
+
             } else {
-                const newProduct = {
-                    id: getNextProductId(),
-                    name: name,
-                    price: price,
-                    stock: stock,
-                    sortOrder: getNextSortOrder(),
-                    tileColor: tileColor
-                };
-
-                state.products.push(newProduct);
-                await saveProductToDatabase(newProduct);
+                productsToSave = [{
+                    id:
+                        getNextProductId(
+                            authoritativeProducts
+                        ),
+                    name,
+                    price,
+                    stock,
+                    sortOrder:
+                        getNextSortOrder(
+                            authoritativeProducts
+                        ),
+                    tileColor
+                }];
             }
+
         } else {
-            const variants = collectVariantInputs();
-            const variantError = validateVariants(variants);
+            const variants =
+                collectVariantInputs();
+
+            const variantError =
+                validateVariants(variants);
 
             if (variantError) {
-                dom.productFormError.textContent = variantError;
+                dom.productFormError.textContent =
+                    variantError;
                 return;
             }
 
-            const groupId = editingProductGroupId || createGroupId();
-            const existingGroupProducts = editingProductGroupId
-                ? productsInGroup(editingProductGroupId)
-                : editingProductId
-                  ? state.products.filter(function (product) {
-                        return product.id === editingProductId;
-                    })
-                  : [];
+            const groupId =
+                editingProductGroupId ||
+                createGroupId();
 
-            let nextId = getNextProductId();
-            const usedIds = new Set();
+            const existingGroupProducts =
+                editingProductGroupId
+                    ? productsInGroup(
+                        editingProductGroupId
+                    )
+                    : editingProductId
+                      ? state.products.filter(
+                            function (product) {
+                                return (
+                                    product.id ===
+                                    editingProductId
+                                );
+                            }
+                        )
+                      : [];
+
+            let nextId =
+                getNextProductId(
+                    authoritativeProducts
+                );
+
+            const usedIds =
+                new Set();
 
             const existingSortOrder =
                 existingGroupProducts.length > 0
-                    ? getProductSortOrder(existingGroupProducts[0])
-                    : getNextSortOrder();
+                    ? getProductSortOrder(
+                        existingGroupProducts[0]
+                    )
+                    : getNextSortOrder(
+                        authoritativeProducts
+                    );
 
-            const updatedVariants = variants.map(function (variant, index) {
-                let id = variant.productId;
+            productsToSave =
+                variants.map(
+                    function (variant, index) {
+                        let id =
+                            variant.productId;
 
-                if (!id && index === 0 && editingProductId && !editingProductGroupId) {
-                    id = editingProductId;
-                }
+                        if (
+                            !id &&
+                            index === 0 &&
+                            editingProductId &&
+                            !editingProductGroupId
+                        ) {
+                            id =
+                                editingProductId;
+                        }
 
-                if (!id) {
-                    id = nextId;
-                    nextId += 1;
-                }
+                        if (!id) {
+                            id = nextId;
+                            nextId += 1;
+                        }
 
-                usedIds.add(id);
+                        usedIds.add(id);
 
-                return {
-                    id: id,
-                    name: name,
-                    price: price,
-                    stock: variant.stock,
-                    groupId: groupId,
-                    variantName: variant.name,
-                    variantOrder: variant.order,
-                    sortOrder: existingSortOrder,
-                    tileColor: tileColor
-                };
-            });
+                        return {
+                            id,
+                            name,
+                            price,
+                            stock:
+                                variant.stock,
+                            groupId,
+                            variantName:
+                                variant.name,
+                            variantOrder:
+                                variant.order,
+                            sortOrder:
+                                existingSortOrder,
+                            tileColor
+                        };
+                    }
+                );
 
-            const removedIds = existingGroupProducts
-                .map(function (product) {
-                    return product.id;
-                })
-                .filter(function (id) {
-                    return !usedIds.has(id);
-                });
+            productIdsToDelete =
+                existingGroupProducts
+                    .map(function (product) {
+                        return product.id;
+                    })
+                    .filter(function (id) {
+                        return !usedIds.has(id);
+                    });
 
-            await replaceProductsInDatabase(
-                updatedVariants,
-                removedIds
-            );
-
-            removeProductsFromCart(
-                existingGroupProducts.map(function (product) {
-                    return product.id;
-                })
-            );
-
-            state.products = state.products.filter(function (product) {
-                return !existingGroupProducts.some(function (existingProduct) {
-                    return existingProduct.id === product.id;
-                });
-            });
-            state.products.push(...updatedVariants);
+            cartIdsToRemove =
+                existingGroupProducts.map(
+                    function (product) {
+                        return product.id;
+                    }
+                );
         }
 
-        state.products.sort(compareProductsForDisplay);
+        setProductCloudStatus(
+            "Saving product changes to Supabase…"
+        );
+
+        /*
+         * Narrow cloud writes only: upsert the affected rows, then delete only
+         * the specific variant rows removed by this edit. We no longer upload
+         * the whole local catalogue or delete cloud rows because they are
+         * absent from an IndexedDB snapshot.
+         */
+        await upsertCloudProducts(
+            productsToSave
+        );
+
+        await deleteCloudProducts(
+            productIdsToDelete
+        );
+
+        removeProductsFromCart(
+            cartIdsToRemove
+        );
 
         closeProductModal();
-        announceProductsChanged();
+
+        await refreshProductCacheFromCloud();
+
     } catch (error) {
-        console.error("Product could not be saved:", error);
+        console.error(
+            "Product could not be saved:",
+            error
+        );
+
+        await refreshProductCacheFromCloud()
+            .catch(function () {});
+
         dom.productFormError.textContent =
+            error.message ||
             "The product could not be saved.";
     }
 }
 
 async function deleteProduct(productId) {
-    const product = state.products.find(function (item) {
-        return item.id === productId;
-    });
+    if (!requireOnlineProductManagement()) {
+        return;
+    }
+
+    const product =
+        state.products.find(function (item) {
+            return item.id === productId;
+        });
 
     if (!product) {
         return;
     }
 
     const shouldDelete = window.confirm(
-        `Delete "${product.name}"?\n\nIt will disappear from the Till. Previous sales containing this product will remain in Reports.`
+        `Delete "${product.name}"?\n\n` +
+        "It will disappear from the Till. Previous sales containing this product will remain in Reports."
     );
 
     if (!shouldDelete) {
@@ -773,52 +1238,90 @@ async function deleteProduct(productId) {
     }
 
     try {
-        await deleteProductFromDatabase(productId);
+        setProductCloudStatus(
+            `Deleting "${product.name}" from Supabase…`
+        );
 
-        state.products = state.products.filter(function (item) {
-            return item.id !== productId;
-        });
+        await deleteCloudProducts([
+            productId
+        ]);
 
         state.cart.delete(productId);
-        announceProductsChanged();
+
+        await refreshProductCacheFromCloud();
+
     } catch (error) {
-        console.error("Product could not be deleted:", error);
-        window.alert("The product could not be deleted.");
+        console.error(
+            "Product could not be deleted:",
+            error
+        );
+
+        await refreshProductCacheFromCloud()
+            .catch(function () {});
+
+        window.alert(
+            "The product could not be deleted.\n\n" +
+            (error.message || error)
+        );
     }
 }
 
 async function deleteProductGroup(groupId) {
-    const groupProducts = productsInGroup(groupId);
+    if (!requireOnlineProductManagement()) {
+        return;
+    }
+
+    const groupProducts =
+        productsInGroup(groupId);
 
     if (groupProducts.length === 0) {
         return;
     }
 
-    const productName = groupProducts[0].name;
-    const shouldDelete = window.confirm(
-        `Delete "${productName}" and all ${groupProducts.length} variants?\n\nThey will disappear from the Till. Previous sales will remain in Reports.`
-    );
+    const productName =
+        groupProducts[0].name;
+
+    const shouldDelete =
+        window.confirm(
+            `Delete "${productName}" and all ${groupProducts.length} variants?\n\n` +
+            "They will disappear from the Till. Previous sales will remain in Reports."
+        );
 
     if (!shouldDelete) {
         return;
     }
 
-    const ids = groupProducts.map(function (product) {
-        return product.id;
-    });
+    const ids =
+        groupProducts.map(
+            function (product) {
+                return product.id;
+            }
+        );
 
     try {
-        await deleteProductsFromDatabase(ids);
+        setProductCloudStatus(
+            `Deleting "${productName}" from Supabase…`
+        );
 
-        state.products = state.products.filter(function (product) {
-            return product.groupId !== groupId;
-        });
+        await deleteCloudProducts(ids);
 
         removeProductsFromCart(ids);
-        announceProductsChanged();
+
+        await refreshProductCacheFromCloud();
+
     } catch (error) {
-        console.error("Product group could not be deleted:", error);
-        window.alert("The product and its variants could not be deleted.");
+        console.error(
+            "Product group could not be deleted:",
+            error
+        );
+
+        await refreshProductCacheFromCloud()
+            .catch(function () {});
+
+        window.alert(
+            "The product and its variants could not be deleted.\n\n" +
+            (error.message || error)
+        );
     }
 }
 
@@ -847,4 +1350,21 @@ export function initialiseProductManagement() {
             closeProductModal();
         }
     });
+
+    window.addEventListener(
+        "online",
+        updateProductManagementAvailability
+    );
+
+    window.addEventListener(
+        "offline",
+        updateProductManagementAvailability
+    );
+
+    document.addEventListener(
+        "cloud-data-loaded",
+        updateProductManagementAvailability
+    );
+
+    updateProductManagementAvailability();
 }
