@@ -1,4 +1,4 @@
-import { localTrainingUser, defaultProducts } from "./config.js?v=step1e";
+import { localTrainingUser } from "./config.js?v=step3a1";
 import { state } from "./state.js";
 
 const databaseName = "MerchTillDatabase";
@@ -102,21 +102,6 @@ export function loadProductsFromDatabase() {
     });
 }
 
-function addDefaultProductsToDatabase() {
-    return new Promise(function (resolve, reject) {
-        const transaction = state.database.transaction("products", "readwrite");
-        const store = transaction.objectStore("products");
-
-        defaultProducts.forEach(function (product) {
-            store.put({ ...product });
-        });
-
-        transaction.oncomplete = resolve;
-        transaction.onerror = function () {
-            reject(transaction.error);
-        };
-    });
-}
 
 export function saveProductToDatabase(product) {
     return new Promise(function (resolve, reject) {
@@ -555,11 +540,13 @@ export async function initialiseProductDatabase() {
     await openDatabase();
     await loadProductsFromDatabase();
 
-    if (state.products.length === 0) {
-        await addDefaultProductsToDatabase();
-        await loadProductsFromDatabase();
-    }
-
+    /*
+     * An empty product catalogue is a valid state.
+     * Do not manufacture demo/default products.
+     *
+     * For cloud users, Supabase will subsequently refresh this local cache.
+     * If Supabase also contains zero products, the Till remains empty.
+     */
     return state.products;
 }
 

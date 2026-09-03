@@ -88,8 +88,17 @@ export function renderTillProducts() {
 
     const trainingMode = isTrainingUser();
     const tradingClosed = !state.currentSession && !trainingMode;
+    const displayProducts = tillDisplayProducts();
 
-    tillDisplayProducts().forEach(function (entry) {
+    if (displayProducts.length === 0) {
+        const emptyMessage = document.createElement("div");
+        emptyMessage.className = "no-products-message";
+        emptyMessage.textContent = "No products available to sell.";
+        dom.productGrid.appendChild(emptyMessage);
+        return;
+    }
+
+    displayProducts.forEach(function (entry) {
         if (entry.type === "single") {
             renderSingleProductButton(entry.product, trainingMode, tradingClosed);
         } else {

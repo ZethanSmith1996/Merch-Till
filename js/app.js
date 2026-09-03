@@ -4,7 +4,7 @@ import {
     initialiseUsersDatabase,
     loadSalesFromDatabase,
     loadSessionsFromDatabase
-} from "./database.js?v=step1e";
+} from "./database.js?v=step3a1";
 import {
     initialiseNavigation,
     applyNavigationPermissions
