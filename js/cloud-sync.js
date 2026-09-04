@@ -74,7 +74,12 @@ function unmapSession(row) {
         closedAt: row.closed_at || null,
         openedBy: row.opened_by || null,
         closedBy: row.closed_by || null,
-        status: row.status || (row.closed_at ? "closed" : "open")
+        status: row.status || (row.closed_at ? "closed" : "open"),
+        productionId:
+            row.production_id === null ||
+            row.production_id === undefined
+                ? null
+                : Number(row.production_id)
     };
 }
 
@@ -143,6 +148,8 @@ function mapSession(session) {
         opened_by: session.openedBy || null,
         closed_by: session.closedBy || null,
         status: session.status || (session.closedAt ? "closed" : "open"),
+        production_id:
+            session.productionId ?? null,
         cloud_updated_at: new Date().toISOString()
     };
 }

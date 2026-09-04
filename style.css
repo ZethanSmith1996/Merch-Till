@@ -2509,3 +2509,75 @@ select:focus {
 .report-payment-methods:empty {
     display: none;
 }
+
+
+/* ==================================================
+   Priority 14B — Current Production indicator
+================================================== */
+
+.production-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 32px;
+    max-width: min(360px, 42vw);
+    padding: 6px 11px;
+    border: 2px solid var(--grey-300);
+    border-radius: 999px;
+    background: var(--white);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.production-status-pill span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.production-status-dot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 50%;
+    background: #6b7280;
+}
+
+.production-status-pill.production-active {
+    border-color: #c4b5fd;
+    background: #f5f3ff;
+    color: #6d28d9;
+}
+
+.production-status-pill.production-active .production-status-dot {
+    background: #7c3aed;
+}
+
+.production-status-pill.no-production {
+    border-color: var(--grey-300);
+    background: var(--grey-100);
+    color: var(--grey-700);
+}
+
+.production-status-pill.no-production .production-status-dot {
+    background: #6b7280;
+}
+
+.production-status-pill.production-checking {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.production-status-pill.production-checking .production-status-dot {
+    background: #2563eb;
+}
+
+@media (max-width: 700px) {
+    .production-status-pill {
+        max-width: 72vw;
+        padding: 6px 9px;
+        font-size: 12px;
+    }
+}

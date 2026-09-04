@@ -5,6 +5,8 @@ export const dom = {
     tradingStatusLabel: document.getElementById("trading-status-label"),
     globalCloudStatusPill: document.getElementById("global-cloud-status-pill"),
     globalCloudStatusLabel: document.getElementById("global-cloud-status-label"),
+    productionStatusPill: document.getElementById("production-status-pill"),
+    productionStatusLabel: document.getElementById("production-status-label"),
     sessionControlBar: document.getElementById("session-control-bar"),
     loginForm: document.getElementById("login-form"),
     errorMessage: document.getElementById("login-error"),

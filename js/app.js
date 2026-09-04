@@ -23,7 +23,7 @@ import {
     initialiseSessions,
     renderSessionStatus,
     restoreCurrentOrderNumber
-} from "./sessions.js?v=priority10c";
+} from "./sessions.js?v=priority14b";
 import {
     initialiseReports,
     renderReports
@@ -32,9 +32,10 @@ import {
     initialiseUserManagement,
     renderUsersTable
 } from "./users.js?v=priority14a";
-import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority13a";
+import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority14b";
 import { initialiseAuditLog } from "./audit-log.js?v=priority10c1";
 import { initialiseOptions, refreshOptionsFromCloud } from "./options.js?v=priority11b";
+import { initialiseProductions, refreshCurrentProduction } from "./productions.js?v=priority14b";
 
 function refreshProductDisplays() {
     renderTillProducts();
@@ -85,9 +86,44 @@ async function startApplication() {
     initialiseUserManagement();
     initialiseAuditLog();
     initialiseOptions();
+    initialiseProductions();
     initialiseCloudSync();
 
     document.addEventListener("products-changed", refreshProductDisplays);
+
+    document.addEventListener(
+        "production-refresh-requested",
+        function () {
+            refreshCurrentProduction({
+                silent: true
+            });
+        }
+    );
+
+    document.addEventListener(
+        "production-changed",
+        async function (event) {
+            const autoClosedSessionIds =
+                event.detail
+                    ?.autoClosedSessionIds ||
+                [];
+
+            /*
+             * If lifecycle processing automatically closed an expired
+             * production's open session, pull the authoritative cloud state so
+             * every screen immediately reflects Trading Closed.
+             */
+            if (
+                autoClosedSessionIds.length >
+                0
+            ) {
+                await refreshLocalCacheFromCloud()
+                    .catch(function () {});
+            }
+
+            renderSessionStatus();
+        }
+    );
     document.addEventListener("user-role-changed", refreshRolePermissions);
     document.addEventListener(
         "cloud-order-number-updated",
@@ -119,6 +155,10 @@ async function startApplication() {
         if (isCloudUsername(signedInUsername)) {
             await refreshLocalCacheFromCloud();
             await refreshOptionsFromCloud({
+                silent: true
+            });
+
+            await refreshCurrentProduction({
                 silent: true
             });
         } else {

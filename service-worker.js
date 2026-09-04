@@ -1,15 +1,15 @@
-const CACHE_NAME = "merch-till-pwa-v14a";
+const CACHE_NAME = "merch-till-pwa-v14b";
 
 const APP_SHELL = [
     "./",
     "./index.html",
-    "./style.css?v=priority13b3",
+    "./style.css?v=priority14b",
     "./manifest.webmanifest",
     "./icons/icon-180.png",
     "./icons/icon-192.png",
     "./icons/icon-512.png",
     "./icons/icon-512-maskable.png",
-    "./js/app.js?v=priority14a"
+    "./js/app.js?v=priority14b"
 ];
 
 self.addEventListener("install", function (event) {

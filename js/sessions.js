@@ -60,6 +60,8 @@ function mapSessionForCloud(session) {
         opened_by: session.openedBy || null,
         closed_by: session.closedBy || null,
         status: session.status || (session.closedAt ? "closed" : "open"),
+        production_id:
+            session.productionId ?? null,
         cloud_updated_at: new Date().toISOString()
     };
 }
@@ -71,7 +73,12 @@ function unmapCloudSession(row) {
         closedAt: row.closed_at || null,
         openedBy: row.opened_by || null,
         closedBy: row.closed_by || null,
-        status: row.status || (row.closed_at ? "closed" : "open")
+        status: row.status || (row.closed_at ? "closed" : "open"),
+        productionId:
+            row.production_id === null ||
+            row.production_id === undefined
+                ? null
+                : Number(row.production_id)
     };
 }
 
@@ -218,8 +225,19 @@ export function renderSessionStatus() {
         dom.tradingStatusPill.classList.remove("trading-closed");
         dom.tradingStatusPill.classList.add("trading-open");
         dom.tradingStatusLabel.textContent = "Trading Open";
-        dom.sessionStatusText.textContent = `Session open — started ${formatTime(state.currentSession.openedAt)
-        }`;
+        const productionText =
+            state.currentSession.productionId
+                ? (
+                    state.currentProduction &&
+                    String(state.currentProduction.id) ===
+                        String(state.currentSession.productionId)
+                        ? ` · ${state.currentProduction.name}`
+                        : " · Assigned Production"
+                )
+                : " · Unassigned";
+
+        dom.sessionStatusText.textContent =
+            `Session open — started ${formatTime(state.currentSession.openedAt)}${productionText}`;
 
         /*
          * Admin and Master Admin need the session bar
@@ -304,47 +322,71 @@ async function startSession() {
             return;
         }
 
-        const session = {
-            id: createUniqueSessionId(),
-            openedAt: new Date().toISOString(),
-            closedAt: null,
-            openedBy: username(),
-            closedBy: null,
-            status: "open"
-        };
+        const requestedSessionId =
+            createUniqueSessionId();
 
         setSessionCloudStatus(
             "Starting trading session in Supabase…"
         );
 
-        await sessionCloudRequest(
-            "sessions",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
-                body: JSON.stringify(
-                    mapSessionForCloud(session)
-                )
-            }
-        );
+        const response =
+            await sessionCloudRequest(
+                "rpc/start_trading_session",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                        "Accept":
+                            "application/json"
+                    },
+                    body:
+                        JSON.stringify({
+                            p_session_id:
+                                requestedSessionId,
+                            p_department_key:
+                                "merch"
+                        })
+                }
+            );
+
+        const result =
+            await response.json();
+
+        const sessionId =
+            Number(
+                result?.session_id ||
+                requestedSessionId
+            );
 
         state.currentOrderNumber = 1;
         dom.orderNumberDisplay.textContent = "1";
 
         await logAuditEvent(
             "trading_session",
-            `${auditActorUsername()} opened trading session.`,
+            result?.production_name
+                ? `${auditActorUsername()} opened trading session for production "${result.production_name}".`
+                : `${auditActorUsername()} opened unassigned trading session — no production was active.`,
             {
                 session_id:
-                    session.id
+                    sessionId,
+                production_id:
+                    result?.production_id ??
+                    null,
+                production_name:
+                    result?.production_name ??
+                    null
             },
-            `session-open:${session.id}`
+            `session-open:${sessionId}`
         );
 
         await refreshSessionCacheFromCloud();
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "production-refresh-requested"
+            )
+        );
 
     } catch (error) {
         console.error("Session could not be started:", error);
@@ -542,6 +584,11 @@ export function initialiseSessions() {
     document.addEventListener(
         "cloud-data-loaded",
         updateSessionManagementAvailability
+    );
+
+    document.addEventListener(
+        "production-changed",
+        renderSessionStatus
     );
 
     updateSessionManagementAvailability();
