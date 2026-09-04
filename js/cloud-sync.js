@@ -21,6 +21,8 @@ let syncInProgress = false;
 let lastGlobalSyncError = null;
 let cloudReachable = navigator.onLine;
 let connectivityCheckInProgress = false;
+let lastReconnectAt = 0;
+const RECONNECT_SYNC_GRACE_MS = 10000;
 let sharedProductRefreshInProgress = false;
 
 function compareProducts(first, second) {
@@ -1207,6 +1209,9 @@ async function checkCloudReachability() {
          * Tiny heartbeat. Any HTTP response proves Supabase is reachable;
          * only a fetch/network failure means the cloud is unavailable.
          */
+        const wasReachable =
+            cloudReachable;
+
         await fetch(
             `${supabaseConfig.url}/rest/v1/`,
             {
@@ -1216,6 +1221,14 @@ async function checkCloudReachability() {
         );
 
         cloudReachable = true;
+
+        if (!wasReachable) {
+            lastReconnectAt =
+                Date.now();
+            lastGlobalSyncError =
+                null;
+        }
+
         return true;
 
     } catch (error) {
@@ -1285,6 +1298,13 @@ function updateGlobalCloudIndicator() {
     const waitingCount =
         queueSummary.count;
 
+    const withinReconnectGrace =
+        lastReconnectAt > 0 &&
+        (
+            Date.now() -
+            lastReconnectAt
+        ) < RECONNECT_SYNC_GRACE_MS;
+
     if (
         !navigator.onLine ||
         cloudReachable === false
@@ -1297,6 +1317,26 @@ function updateGlobalCloudIndicator() {
             waitingCount > 0
                 ? `${waitingCount} operation${waitingCount === 1 ? "" : "s"} safely stored on this device and waiting for internet.`
                 : "This device is offline. Cached Till data remains available."
+        );
+        return;
+    }
+
+    if (
+        withinReconnectGrace &&
+        (
+            syncInProgress ||
+            waitingCount > 0 ||
+            hasOtherPendingWork
+        )
+    ) {
+        setGlobalCloudIndicator(
+            waitingCount > 0
+                ? `SYNCING — ${waitingCount} WAITING`
+                : "SYNCING",
+            "cloud-syncing",
+            waitingCount > 0
+                ? `${waitingCount} operation${waitingCount === 1 ? "" : "s"} waiting for Supabase confirmation after reconnecting.`
+                : "Cloud changes are being synchronised after reconnecting."
         );
         return;
     }
@@ -1773,6 +1813,8 @@ export function initialiseCloudSync() {
 
     window.addEventListener("online", function () {
         lastGlobalSyncError = null;
+        lastReconnectAt = Date.now();
+        updateGlobalCloudIndicator();
 
         checkCloudReachability().then(function (reachable) {
             if (reachable) {
