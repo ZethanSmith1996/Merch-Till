@@ -36,7 +36,7 @@ import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud 
 import { initialiseAuditLog } from "./audit-log.js?v=priority10c1";
 import { initialiseOptions, refreshOptionsFromCloud } from "./options.js?v=priority11b";
 import { initialiseProductions, refreshCurrentProduction } from "./productions.js?v=priority14b";
-import { initialiseArchive } from "./archive.js?v=priority14c3";
+import { initialiseArchive } from "./archive.js?v=priority14d";
 
 function refreshProductDisplays() {
     renderTillProducts();

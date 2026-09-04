@@ -3005,3 +3005,224 @@ select:focus {
         flex-direction: column;
     }
 }
+
+
+/* ==================================================
+   Priority 14D — Production Historical Reports
+================================================== */
+
+.archive-production-report-host {
+    margin-top: 18px;
+}
+
+.archive-report-loading,
+.archive-report-error {
+    padding: 18px;
+    border: 1px solid var(--grey-300);
+    border-radius: 10px;
+    background: var(--grey-100);
+    color: var(--grey-700);
+}
+
+.archive-report-error {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.archive-report-panel {
+    padding-top: 18px;
+    border-top: 1px solid var(--grey-200);
+}
+
+.archive-report-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.archive-report-heading h4,
+.archive-report-products h4,
+.archive-report-transactions-heading h4 {
+    margin: 0;
+}
+
+.archive-report-heading p {
+    margin: 4px 0 0;
+    color: var(--grey-600);
+}
+
+.archive-report-filters {
+    display: grid;
+    grid-template-columns:
+        minmax(140px, 1fr)
+        minmax(140px, 1fr)
+        minmax(180px, 1.4fr);
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+
+.archive-report-filters .form-group {
+    margin: 0;
+}
+
+.archive-report-filters input,
+.archive-report-filters select {
+    width: 100%;
+    min-height: 44px;
+    box-sizing: border-box;
+}
+
+.archive-report-summary-grid {
+    margin-top: 0;
+}
+
+.archive-report-products {
+    margin-top: 18px;
+    overflow: hidden;
+    border: 1px solid var(--grey-300);
+    border-radius: 10px;
+    background: var(--white);
+}
+
+.archive-report-products h4 {
+    padding: 13px 15px;
+    border-bottom: 1px solid var(--grey-200);
+    background: var(--grey-100);
+}
+
+.archive-report-product-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--grey-200);
+}
+
+.archive-report-product-row:last-child {
+    border-bottom: 0;
+}
+
+.archive-report-transactions-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 20px 0 10px;
+}
+
+.archive-report-transactions-heading span {
+    color: var(--grey-600);
+    font-size: 13px;
+}
+
+.archive-report-transactions {
+    display: grid;
+    gap: 8px;
+}
+
+.archive-report-transaction {
+    overflow: hidden;
+    border: 1px solid var(--grey-300);
+    border-radius: 10px;
+    background: var(--white);
+}
+
+.archive-report-transaction.voided {
+    opacity: 0.72;
+}
+
+.archive-report-transaction-summary {
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1.6fr)
+        minmax(80px, 0.55fr)
+        minmax(90px, 0.6fr)
+        44px;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+    padding: 12px 14px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.archive-report-transaction-summary:hover {
+    background: var(--grey-100);
+}
+
+.archive-report-transaction-summary span:first-child strong,
+.archive-report-transaction-summary span:first-child small {
+    display: block;
+}
+
+.archive-report-transaction-summary span:first-child small {
+    margin-top: 2px;
+    color: var(--grey-600);
+}
+
+.archive-report-transaction-details {
+    padding: 0 14px 14px;
+    border-top: 1px solid var(--grey-200);
+}
+
+.archive-report-item-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--grey-200);
+}
+
+.archive-report-transaction-meta {
+    display: grid;
+    gap: 6px;
+    padding-top: 12px;
+    color: var(--grey-700);
+    font-size: 13px;
+}
+
+.archive-report-void-meta {
+    color: #b91c1c;
+}
+
+.archive-report-empty {
+    margin: 0;
+    padding: 16px;
+    color: var(--grey-600);
+}
+
+@media (max-width: 700px) {
+    .archive-report-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .archive-report-filters {
+        grid-template-columns: 1fr;
+    }
+
+    .archive-report-transaction-summary {
+        grid-template-columns:
+            minmax(0, 1fr)
+            auto;
+    }
+
+    .archive-report-transaction-summary > span:nth-child(2),
+    .archive-report-transaction-summary > strong {
+        grid-column: 1 / 2;
+    }
+
+    .archive-report-transaction-summary > span:last-child {
+        grid-column: 2 / 3;
+        grid-row: 1 / 4;
+    }
+}
