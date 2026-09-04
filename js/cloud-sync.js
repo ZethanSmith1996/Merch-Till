@@ -3,6 +3,7 @@ import { state } from "./state.js";
 import { supabaseConfig } from "./config.js";
 import { isMasterAdmin } from "./permissions.js";
 import { getValidCloudAccessToken, isCloudUsername } from "./auth.js";
+import { logAuditEvent } from "./audit-log.js?v=priority10c";
 import {
     replaceCloudDataInDatabase,
     replaceCloudCatalogueInDatabase,
@@ -553,6 +554,12 @@ async function uploadSaleOperationQueue() {
                         operation
                     );
 
+                document.dispatchEvent(
+                    new CustomEvent(
+                        "audit-log-updated"
+                    )
+                );
+
                 if (
                     Number.isFinite(
                         Number(
@@ -913,6 +920,22 @@ function atomicSaleErrorInfo(error) {
 async function discardRejectedOfflineSale(operation, conflict) {
     const saleId =
         operation?.sale?.id;
+
+    await logAuditEvent(
+        "system_sync",
+        `Offline sale Order #${operation?.sale?.orderNumber ?? "?"} was rejected because stock was unavailable and was excluded from reporting.`,
+        {
+            sale_id:
+                saleId ?? null,
+            provisional_order_number:
+                operation?.sale?.orderNumber ?? null,
+            reason:
+                conflict.code
+        },
+        saleId !== undefined && saleId !== null
+            ? `offline-rejected:${saleId}`
+            : null
+    );
 
     if (
         saleId !== undefined &&

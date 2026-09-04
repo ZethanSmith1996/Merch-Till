@@ -4,6 +4,7 @@ import { currencyFormatter } from "./config.js";
 import { announceProductsChanged, escapeHTML } from "./utils.js";
 import { saveVoidedSaleTransaction } from "./database.js";
 import { canViewReports } from "./permissions.js";
+import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
 
 let reportMode = "all";
 let activeSessionId = "all";
@@ -158,6 +159,19 @@ async function voidSale(sale) {
 
         announceProductsChanged();
         document.dispatchEvent(new CustomEvent("sales-changed"));
+
+        await logAuditEvent(
+            "void",
+            `${auditActorUsername()} voided Order #${sale.orderNumber} (${currencyFormatter.format(Number(sale.total) || 0)}).`,
+            {
+                sale_id: sale.id,
+                order_number:
+                    sale.orderNumber,
+                total:
+                    Number(sale.total) || 0
+            },
+            `void:${sale.id}`
+        );
 
         window.alert(
             `Order #${sale.orderNumber} has been voided.\n\n` +

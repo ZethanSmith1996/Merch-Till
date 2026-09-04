@@ -2,6 +2,7 @@ import { dom } from "./dom.js";
 import { canManageUsers } from "./permissions.js";
 import { escapeHTML } from "./utils.js";
 import { getValidCloudAccessToken } from "./auth.js";
+import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
 
 const MANAGE_USERS_URL =
     "https://zdxduhnfjebahfzuqttk.supabase.co/functions/v1/manage-users";
@@ -357,6 +358,17 @@ async function submitCloudUser(event) {
             `Cloud user "${username}" created successfully.`
         );
 
+        await logAuditEvent(
+            "user_management",
+            `${auditActorUsername()} created user "${username}" as ${roleLabels[role] || role}.`,
+            {
+                target_username:
+                    username,
+                role
+            },
+            `user-create:${data?.user?.id || username}:${Date.now()}`
+        );
+
         /*
          * Reload from Supabase immediately so the
          * normal Users table confirms the new account.
@@ -583,6 +595,20 @@ async function submitCloudPasswordChange(event) {
             `Password changed successfully for "${targetUser.username}".`
         );
 
+        await logAuditEvent(
+            "user_management",
+            `${auditActorUsername()} changed the password for "${targetUser.username}".`,
+            {
+                target_user_id:
+                    targetUser.id,
+                target_username:
+                    targetUser.username,
+                action:
+                    "password_changed"
+            },
+            `password-change:${targetUser.id}:${Date.now()}`
+        );
+
     } catch (caughtError) {
         console.error(
             "Cloud password could not be changed:",
@@ -671,6 +697,22 @@ async function changeCloudUserRole(userId, newRole, selectElement) {
             `User "${targetUser.username}" changed to ${newLabel}.`
         );
 
+        await logAuditEvent(
+            "user_management",
+            `${auditActorUsername()} changed "${targetUser.username}" role from ${oldLabel} → ${newLabel}.`,
+            {
+                target_user_id:
+                    targetUser.id,
+                target_username:
+                    targetUser.username,
+                old_role:
+                    oldRole,
+                new_role:
+                    newRole
+            },
+            `user-role:${targetUser.id}:${Date.now()}`
+        );
+
         await fetchCloudUsers();
 
     } catch (error) {
@@ -752,6 +794,20 @@ async function changeCloudUserStatus(userId, currentlyActive) {
         setUsersStatus(
             data?.message ||
             `User "${targetUser.username}" updated successfully.`
+        );
+
+        await logAuditEvent(
+            "user_management",
+            `${auditActorUsername()} ${currentlyActive ? "disabled" : "enabled"} user "${targetUser.username}".`,
+            {
+                target_user_id:
+                    targetUser.id,
+                target_username:
+                    targetUser.username,
+                active:
+                    !currentlyActive
+            },
+            `user-status:${targetUser.id}:${currentlyActive ? "disabled" : "enabled"}:${Date.now()}`
         );
 
         await fetchCloudUsers();

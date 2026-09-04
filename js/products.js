@@ -6,6 +6,7 @@ import { dom } from "./dom.js";
 import { state } from "./state.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step3b";
 import { announceProductsChanged, escapeHTML } from "./utils.js";
+import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
 
 function getNextProductId(products = state.products) {
     if (products.length === 0) {
@@ -18,6 +19,146 @@ function getNextProductId(products = state.products) {
         })
     ) + 1;
 }
+
+
+function auditColourLabel(value) {
+    const colour =
+        String(value || "default");
+
+    return (
+        colour.charAt(0).toUpperCase() +
+        colour.slice(1)
+    );
+}
+
+function auditProductDisplayName(product) {
+    if (!product) return "Product";
+
+    return product.variantName
+        ? `${product.name} — ${product.variantName}`
+        : product.name;
+}
+
+function buildProductEditAudit(
+    beforeProducts,
+    afterProducts,
+    productName
+) {
+    const changes = [];
+
+    const beforeById =
+        new Map(
+            beforeProducts.map(function (product) {
+                return [
+                    String(product.id),
+                    product
+                ];
+            })
+        );
+
+    const afterById =
+        new Map(
+            afterProducts.map(function (product) {
+                return [
+                    String(product.id),
+                    product
+                ];
+            })
+        );
+
+    afterProducts.forEach(
+        function (after) {
+            const before =
+                beforeById.get(
+                    String(after.id)
+                );
+
+            if (!before) {
+                changes.push(
+                    `added variant "${after.variantName || after.name}" with stock ${Number(after.stock) || 0}`
+                );
+                return;
+            }
+
+            if (before.name !== after.name) {
+                changes.push(
+                    `name "${before.name}" → "${after.name}"`
+                );
+            }
+
+            if (
+                Number(before.price) !==
+                Number(after.price)
+            ) {
+                changes.push(
+                    `price ${currencyFormatter.format(Number(before.price) || 0)} → ${currencyFormatter.format(Number(after.price) || 0)}`
+                );
+            }
+
+            if (
+                Number(before.stock) !==
+                Number(after.stock)
+            ) {
+                changes.push(
+                    `${auditProductDisplayName(after)} stock ${Number(before.stock) || 0} → ${Number(after.stock) || 0}`
+                );
+            }
+
+            if (
+                (before.tileColor || "default") !==
+                (after.tileColor || "default")
+            ) {
+                changes.push(
+                    `colour ${auditColourLabel(before.tileColor)} → ${auditColourLabel(after.tileColor)}`
+                );
+            }
+
+            if (
+                (before.variantName || "") !==
+                (after.variantName || "")
+            ) {
+                changes.push(
+                    `variant "${before.variantName || ""}" → "${after.variantName || ""}"`
+                );
+            }
+        }
+    );
+
+    beforeProducts.forEach(
+        function (before) {
+            if (
+                !afterById.has(
+                    String(before.id)
+                )
+            ) {
+                changes.push(
+                    `removed variant "${before.variantName || before.name}"`
+                );
+            }
+        }
+    );
+
+    const onlyStockChanges =
+        changes.length > 0 &&
+        changes.every(function (change) {
+            return change.includes(" stock ");
+        });
+
+    return {
+        category:
+            onlyStockChanges
+                ? "stock_change"
+                : "product_change",
+
+        message:
+            changes.length > 0
+                ? `${auditActorUsername()} edited "${productName}": ${changes.join("; ")}.`
+                : `${auditActorUsername()} saved "${productName}" with no visible field changes.`,
+
+        changes
+    };
+}
+
 
 
 function productManagementIsOnline() {
@@ -648,6 +789,24 @@ async function moveProductRow(rowIndex, direction) {
             productsToSave
         );
 
+        const movedName =
+            movedRow.type === "single"
+                ? movedRow.product.name
+                : movedRow.products[0]?.name || "Product";
+
+        await logAuditEvent(
+            "product_change",
+            `${auditActorUsername()} moved "${movedName}" ${direction < 0 ? "up" : "down"} in the product order.`,
+            {
+                product_name: movedName,
+                direction:
+                    direction < 0
+                        ? "up"
+                        : "down"
+            },
+            `product-order:${Date.now()}:${Math.random()}`
+        );
+
         await refreshProductCacheFromCloud();
 
     } catch (error) {
@@ -1195,6 +1354,67 @@ async function saveProduct(event) {
             cartIdsToRemove
         );
 
+        const wasEditing =
+            existingAffectedProducts.length > 0;
+
+        if (!wasEditing) {
+            const createdVariants =
+                productsToSave
+                    .map(function (product) {
+                        return product.variantName
+                            ? `${product.variantName} (${Number(product.stock) || 0})`
+                            : null;
+                    })
+                    .filter(Boolean);
+
+            await logAuditEvent(
+                "product_change",
+                createdVariants.length > 0
+                    ? `${auditActorUsername()} created product "${name}" at ${currencyFormatter.format(price)} with variants: ${createdVariants.join(", ")}.`
+                    : `${auditActorUsername()} created product "${name}" at ${currencyFormatter.format(price)} with stock ${Number(productsToSave[0]?.stock) || 0}.`,
+                {
+                    product_ids:
+                        productsToSave.map(function (product) {
+                            return product.id;
+                        }),
+                    product_name: name,
+                    price,
+                    variants:
+                        productsToSave.map(function (product) {
+                            return {
+                                name:
+                                    product.variantName || null,
+                                stock:
+                                    Number(product.stock) || 0
+                            };
+                        })
+                },
+                `product-create:${productsToSave.map(function (product) { return product.id; }).join(",")}:${Date.now()}`
+            );
+        } else {
+            const audit =
+                buildProductEditAudit(
+                    existingAffectedProducts,
+                    productsToSave,
+                    name
+                );
+
+            await logAuditEvent(
+                audit.category,
+                audit.message,
+                {
+                    product_ids:
+                        productsToSave.map(function (product) {
+                            return product.id;
+                        }),
+                    product_name: name,
+                    changes:
+                        audit.changes
+                },
+                `product-edit:${productsToSave.map(function (product) { return product.id; }).join(",")}:${Date.now()}`
+            );
+        }
+
         closeProductModal();
 
         await refreshProductCacheFromCloud();
@@ -1247,6 +1467,18 @@ async function deleteProduct(productId) {
         ]);
 
         state.cart.delete(productId);
+
+        await logAuditEvent(
+            "product_change",
+            `${auditActorUsername()} deleted product "${auditProductDisplayName(product)}".`,
+            {
+                product_id: product.id,
+                product_name: product.name,
+                variant_name:
+                    product.variantName || null
+            },
+            `product-delete:${product.id}`
+        );
 
         await refreshProductCacheFromCloud();
 
@@ -1306,6 +1538,21 @@ async function deleteProductGroup(groupId) {
         await deleteCloudProducts(ids);
 
         removeProductsFromCart(ids);
+
+        await logAuditEvent(
+            "product_change",
+            `${auditActorUsername()} deleted product "${productName}" and all ${groupProducts.length} variants.`,
+            {
+                product_ids: ids,
+                product_name:
+                    productName,
+                variants:
+                    groupProducts.map(function (product) {
+                        return product.variantName || null;
+                    })
+            },
+            `product-group-delete:${groupId}`
+        );
 
         await refreshProductCacheFromCloud();
 

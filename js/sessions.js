@@ -4,7 +4,8 @@ import { replaceSessionCacheInDatabase } from "./database.js?v=step3c";
 import { clearCart, refreshTillAvailability } from './till.js';
 import { canManageSessions, isTrainingUser } from "./permissions.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step3c";
-import { supabaseConfig } from "./config.js?v=step3c";
+import { supabaseConfig, currencyFormatter } from "./config.js?v=step3c";
+import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
 
 
 function setSessionCloudStatus(message, isError = false) {
@@ -333,6 +334,16 @@ async function startSession() {
         state.currentOrderNumber = 1;
         dom.orderNumberDisplay.textContent = "1";
 
+        await logAuditEvent(
+            "trading_session",
+            `${auditActorUsername()} opened trading session.`,
+            {
+                session_id:
+                    session.id
+            },
+            `session-open:${session.id}`
+        );
+
         await refreshSessionCacheFromCloud();
 
     } catch (error) {
@@ -450,6 +461,20 @@ async function cashOffSession() {
                     cloud_updated_at: new Date().toISOString()
                 })
             }
+        );
+
+        await logAuditEvent(
+            "trading_session",
+            `${auditActorUsername()} cashed off trading session. Revenue ${currencyFormatter.format(revenue)}; ${items} item${items === 1 ? "" : "s"} sold; ${sessionSales.length} transaction${sessionSales.length === 1 ? "" : "s"}.`,
+            {
+                session_id:
+                    cloudSession.id,
+                revenue,
+                items,
+                transactions:
+                    sessionSales.length
+            },
+            `session-close:${cloudSession.id}`
         );
 
         clearCart();

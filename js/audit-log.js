@@ -520,6 +520,83 @@ function resetAuditFilters() {
     applyAuditFilters();
 }
 
+
+export async function logAuditEvent(
+    actionCategory,
+    message,
+    details = {},
+    eventKey = null,
+    department = null
+) {
+    /*
+     * Audit logging must never break the Till's primary operation.
+     * The database RPC is append-only and derives the actor identity from the
+     * authenticated Supabase session.
+     */
+    if (!navigator.onLine) {
+        return false;
+    }
+
+    try {
+        const response =
+            await auditCloudRequest(
+                "rpc/log_audit_event_once",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                        "Accept":
+                            "application/json"
+                    },
+                    body: JSON.stringify({
+                        p_action_category:
+                            actionCategory,
+                        p_message:
+                            message,
+                        p_details:
+                            details || {},
+                        p_department:
+                            department,
+                        p_event_key:
+                            eventKey
+                    })
+                }
+            );
+
+        await response.text();
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "audit-log-updated"
+            )
+        );
+
+        return true;
+
+    } catch (error) {
+        console.warn(
+            "Audit event could not be recorded:",
+            error
+        );
+
+        return false;
+    }
+}
+
+function actorUsername() {
+    return (
+        sessionStorage.getItem(
+            "merchTillUsername"
+        ) || "Unknown"
+    );
+}
+
+export function auditActorUsername() {
+    return actorUsername();
+}
+
+
 export async function openAuditLog() {
     if (!canViewAuditLog()) {
         return;
@@ -581,6 +658,19 @@ export function initialiseAuditLog() {
             openAuditLog
         );
     }
+
+    document.addEventListener(
+        "audit-log-updated",
+        function () {
+            if (
+                dom.auditSection &&
+                !dom.auditSection.hidden &&
+                navigator.onLine
+            ) {
+                loadAuditEvents();
+            }
+        }
+    );
 
     window.addEventListener(
         "offline",

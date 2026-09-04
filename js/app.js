@@ -12,7 +12,7 @@ import {
 import {
     initialiseProductManagement,
     renderProductsTable
-} from "./products.js?v=step3b";
+} from "./products.js?v=priority10c";
 import {
     initialiseTill,
     renderCart,
@@ -23,17 +23,17 @@ import {
     initialiseSessions,
     renderSessionStatus,
     restoreCurrentOrderNumber
-} from "./sessions.js?v=step3c";
+} from "./sessions.js?v=priority10c";
 import {
     initialiseReports,
     renderReports
-} from "./reports.js";
+} from "./reports.js?v=priority10c";
 import {
     initialiseUserManagement,
     renderUsersTable
-} from "./users.js?v=step1f2";
-import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority8a2";
-import { initialiseAuditLog } from "./audit-log.js?v=priority10b";
+} from "./users.js?v=priority10c";
+import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority10c";
+import { initialiseAuditLog } from "./audit-log.js?v=priority10c";
 
 function refreshProductDisplays() {
     renderTillProducts();
