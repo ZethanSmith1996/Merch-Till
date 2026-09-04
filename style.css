@@ -2464,3 +2464,29 @@ select:focus {
         grid-template-columns: 1fr;
     }
 }
+
+
+/* ==================================================
+   Priority 13B — Report payment breakdown
+================================================== */
+
+.report-money-breakdown {
+    display: grid;
+    gap: 5px;
+    margin-top: 14px;
+}
+
+.report-money-breakdown > span {
+    color: var(--grey-700);
+    font-size: 13px;
+}
+
+.report-money-breakdown strong {
+    color: var(--navy-950);
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.report-money-breakdown .report-discount-summary {
+    margin: 0 !important;
+}
