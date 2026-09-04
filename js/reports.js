@@ -530,11 +530,21 @@ export function renderReports() {
         return sum + Number(sale.discountAmount || 0);
     }, 0);
 
+    const cashTaken = activeSales.reduce(function (sum, sale) {
+        return sum + Number(sale.cashAmount || 0);
+    }, 0);
+
+    const cardTaken = activeSales.reduce(function (sum, sale) {
+        return sum + Number(sale.cardAmount || 0);
+    }, 0);
+
     const itemsSold = activeSales.reduce(function (sum, sale) {
         return sum + sale.itemCount;
     }, 0);
 
     dom.reportRevenue.textContent = currencyFormatter.format(revenue);
+    dom.reportCash.textContent = currencyFormatter.format(cashTaken);
+    dom.reportCard.textContent = currencyFormatter.format(cardTaken);
     dom.reportDiscounts.textContent = currencyFormatter.format(discounts);
     dom.reportItemsSold.textContent = String(itemsSold);
     dom.reportTransactionsCount.textContent = String(activeSales.length);
