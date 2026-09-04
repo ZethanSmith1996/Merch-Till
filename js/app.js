@@ -8,7 +8,7 @@ import {
 import {
     initialiseNavigation,
     applyNavigationPermissions
-} from "./navigation.js";
+} from "./navigation.js?v=priority14c1";
 import {
     initialiseProductManagement,
     renderProductsTable

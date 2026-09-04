@@ -1,5 +1,5 @@
 import { dom } from "./dom.js";
-import { canAccessScreen } from "./permissions.js";
+import { canAccessScreen } from "./permissions.js?v=priority14c1";
 
 
 function showScreen(screenId) {

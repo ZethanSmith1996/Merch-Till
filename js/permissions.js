@@ -68,9 +68,11 @@ export function canManageOptions() {
 
 export function canManageArchive() {
     return [
-        "manager",
-        "master-admin"
-    ].includes(currentRole());
+        ROLE_MANAGER,
+        ROLE_MASTER_ADMIN
+    ].includes(
+        getCurrentUserRole()
+    );
 }
 
 
