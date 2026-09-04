@@ -131,8 +131,6 @@ export const dom = {
     reportSessionButtons: document.getElementById("report-session-buttons"),
     reportRevenue: document.getElementById("report-revenue"),
     reportPaymentBreakdown: document.getElementById("report-payment-breakdown"),
-    reportCash: document.getElementById("report-cash"),
-    reportCard: document.getElementById("report-card"),
     reportDiscounts: document.getElementById("report-discounts"),
     reportItemsSold: document.getElementById("report-items-sold"),
     reportTransactionsCount: document.getElementById("report-transactions-count"),

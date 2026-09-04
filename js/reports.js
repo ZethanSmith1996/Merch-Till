@@ -530,35 +530,102 @@ export function renderReports() {
         return sum + Number(sale.discountAmount || 0);
     }, 0);
 
-    const hasPaymentData = activeSales.some(function (sale) {
-        /*
-         * Detect payment data from the recorded monetary fields as well as
-         * paymentMethod. This is more robust across local/cloud cache versions:
-         * old pre-Priority-13 sales have both amounts at £0.00, while any
-         * genuine Cash/Card/Split transaction has at least one recorded amount.
-         */
-        const cash =
+    function paymentAmountsForSale(sale) {
+        let cash =
             Number(sale.cashAmount || 0);
 
-        const card =
+        let card =
             Number(sale.cardAmount || 0);
 
-        return (
-            cash > 0 ||
-            card > 0 ||
-            ["cash", "card", "split"].includes(
-                sale.paymentMethod
-            )
+        const recordedPayments =
+            Array.isArray(sale.payments)
+                ? sale.payments
+                : [];
+
+        /*
+         * Fallback for any sale/cache version where the aggregate payment
+         * fields are absent but the individual payment lines are present.
+         */
+        if (
+            cash === 0 &&
+            card === 0 &&
+            recordedPayments.length > 0
+        ) {
+            recordedPayments.forEach(
+                function (payment) {
+                    const amount =
+                        Number(payment.amount || 0);
+
+                    if (
+                        payment.method ===
+                        "cash"
+                    ) {
+                        cash += amount;
+                    }
+
+                    if (
+                        payment.method ===
+                        "card"
+                    ) {
+                        card += amount;
+                    }
+                }
+            );
+        }
+
+        return {
+            cash,
+            card,
+            hasPaymentData:
+                cash > 0 ||
+                card > 0 ||
+                recordedPayments.length > 0 ||
+                ["cash", "card", "split"].includes(
+                    String(
+                        sale.paymentMethod || ""
+                    ).toLowerCase()
+                )
+        };
+    }
+
+    const paymentSummary =
+        activeSales.reduce(
+            function (summary, sale) {
+                const payment =
+                    paymentAmountsForSale(
+                        sale
+                    );
+
+                summary.cash +=
+                    payment.cash;
+
+                summary.card +=
+                    payment.card;
+
+                if (
+                    payment.hasPaymentData
+                ) {
+                    summary.hasPaymentData =
+                        true;
+                }
+
+                return summary;
+            },
+            {
+                cash: 0,
+                card: 0,
+                hasPaymentData: false
+            }
         );
-    });
 
-    const cashTaken = activeSales.reduce(function (sum, sale) {
-        return sum + Number(sale.cashAmount || 0);
-    }, 0);
+    const hasPaymentData =
+        paymentSummary.hasPaymentData;
 
-    const cardTaken = activeSales.reduce(function (sum, sale) {
-        return sum + Number(sale.cardAmount || 0);
-    }, 0);
+    const cashTaken =
+        paymentSummary.cash;
+
+    const cardTaken =
+        paymentSummary.card;
 
     const itemsSold = activeSales.reduce(function (sum, sale) {
         return sum + sale.itemCount;
@@ -567,12 +634,22 @@ export function renderReports() {
     dom.reportRevenue.textContent = currencyFormatter.format(revenue);
 
     if (dom.reportPaymentBreakdown) {
-        dom.reportPaymentBreakdown.hidden =
-            !hasPaymentData;
+        dom.reportPaymentBreakdown.innerHTML =
+            hasPaymentData
+                ? `
+                    <span>
+                        Cash:
+                        <strong>${currencyFormatter.format(cashTaken)}</strong>
+                    </span>
+
+                    <span>
+                        Card:
+                        <strong>${currencyFormatter.format(cardTaken)}</strong>
+                    </span>
+                  `
+                : "";
     }
 
-    dom.reportCash.textContent = currencyFormatter.format(cashTaken);
-    dom.reportCard.textContent = currencyFormatter.format(cardTaken);
     dom.reportDiscounts.textContent = currencyFormatter.format(discounts);
     dom.reportItemsSold.textContent = String(itemsSold);
     dom.reportTransactionsCount.textContent = String(activeSales.length);

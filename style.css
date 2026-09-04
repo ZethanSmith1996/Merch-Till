@@ -2498,11 +2498,14 @@ select:focus {
     gap: 5px;
 }
 
-.report-payment-methods[hidden] {
-    display: none;
-}
 
 .report-payment-methods > span {
     color: var(--grey-700);
     font-size: 13px;
+}
+
+
+/* Priority 13B.3 — adaptive payment rows rendered only when needed */
+.report-payment-methods:empty {
+    display: none;
 }
