@@ -48,7 +48,34 @@ function refreshRolePermissions() {
     renderSessionStatus();
 }
 
+
+async function registerMerchTillServiceWorker() {
+    if (!("serviceWorker" in navigator)) {
+        return;
+    }
+
+    try {
+        await navigator.serviceWorker.register(
+            "./service-worker.js",
+            {
+                scope: "./"
+            }
+        );
+    } catch (error) {
+        /*
+         * PWA registration must never prevent the Till from starting.
+         */
+        console.warn(
+            "Merch Till service worker could not be registered:",
+            error
+        );
+    }
+}
+
+
 async function startApplication() {
+    registerMerchTillServiceWorker();
+
     initialiseAuthentication();
     initialiseNavigation();
     initialiseTill();
