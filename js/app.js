@@ -33,6 +33,7 @@ import {
     renderUsersTable
 } from "./users.js?v=step1f2";
 import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority8a2";
+import { initialiseAuditLog } from "./audit-log.js?v=priority10b";
 
 function refreshProductDisplays() {
     renderTillProducts();
@@ -54,6 +55,7 @@ async function startApplication() {
     initialiseSessions();
     initialiseReports();
     initialiseUserManagement();
+    initialiseAuditLog();
     initialiseCloudSync();
 
     document.addEventListener("products-changed", refreshProductDisplays);

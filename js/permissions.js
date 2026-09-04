@@ -65,6 +65,9 @@ export function canAccessScreen(screenId) {
         case "reports-section":
             return canViewReports();
 
+        case "audit-section":
+            return canViewReports();
+
         case "users-section":
             return canManageUsers();
 
