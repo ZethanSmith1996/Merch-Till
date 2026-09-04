@@ -32,7 +32,7 @@ import {
     initialiseUserManagement,
     renderUsersTable
 } from "./users.js?v=step1f2";
-import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority8a";
+import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority8a1";
 
 function refreshProductDisplays() {
     renderTillProducts();

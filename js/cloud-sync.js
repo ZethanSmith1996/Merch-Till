@@ -19,6 +19,8 @@ const CLOUD_QUEUE_MAX_BACKOFF_MS = 5 * 60 * 1000;
 let syncTimer = null;
 let syncInProgress = false;
 let lastGlobalSyncError = null;
+let cloudReachable = navigator.onLine;
+let connectivityCheckInProgress = false;
 let sharedProductRefreshInProgress = false;
 
 function compareProducts(first, second) {
@@ -187,6 +189,7 @@ async function cloudRequest(path, options = {}) {
         throw error;
     }
 
+    cloudReachable = true;
     return response;
 }
 
@@ -1169,6 +1172,68 @@ function markDirty(changes) {
 }
 
 
+
+function looksLikeConnectivityError(error) {
+    const text =
+        `${error?.message || ""} ${error?.details || ""}`
+            .toLowerCase();
+
+    return (
+        error instanceof TypeError ||
+        text.includes("failed to fetch") ||
+        text.includes("load failed") ||
+        text.includes("networkerror") ||
+        text.includes("network request failed") ||
+        text.includes("offline")
+    );
+}
+
+async function checkCloudReachability() {
+    if (connectivityCheckInProgress) {
+        return cloudReachable;
+    }
+
+    if (!navigator.onLine) {
+        cloudReachable = false;
+        lastGlobalSyncError = null;
+        updateGlobalCloudIndicator();
+        return false;
+    }
+
+    connectivityCheckInProgress = true;
+
+    try {
+        /*
+         * Tiny heartbeat. Any HTTP response proves Supabase is reachable;
+         * only a fetch/network failure means the cloud is unavailable.
+         */
+        await fetch(
+            `${supabaseConfig.url}/rest/v1/`,
+            {
+                method: "HEAD",
+                cache: "no-store"
+            }
+        );
+
+        cloudReachable = true;
+        return true;
+
+    } catch (error) {
+        cloudReachable = false;
+
+        if (looksLikeConnectivityError(error)) {
+            lastGlobalSyncError = null;
+        }
+
+        return false;
+
+    } finally {
+        connectivityCheckInProgress = false;
+        updateGlobalCloudIndicator();
+    }
+}
+
+
 function setGlobalCloudIndicator(
     label,
     stateClass,
@@ -1220,7 +1285,10 @@ function updateGlobalCloudIndicator() {
     const waitingCount =
         queueSummary.count;
 
-    if (!navigator.onLine) {
+    if (
+        !navigator.onLine ||
+        cloudReachable === false
+    ) {
         setGlobalCloudIndicator(
             waitingCount > 0
                 ? `OFFLINE — ${waitingCount} WAITING`
@@ -1276,8 +1344,22 @@ function updateGlobalCloudIndicator() {
 
 function updateCloudUploadStatus(message, isError = false) {
     if (isError) {
-        lastGlobalSyncError =
-            message || "Cloud sync error";
+        const lowerMessage =
+            String(message || "")
+                .toLowerCase();
+
+        if (
+            lowerMessage.includes("failed to fetch") ||
+            lowerMessage.includes("load failed") ||
+            lowerMessage.includes("network") ||
+            lowerMessage.includes("offline")
+        ) {
+            cloudReachable = false;
+            lastGlobalSyncError = null;
+        } else {
+            lastGlobalSyncError =
+                message || "Cloud sync error";
+        }
     } else if (
         message &&
         (
@@ -1286,6 +1368,7 @@ function updateCloudUploadStatus(message, isError = false) {
             message.includes("complete")
         )
     ) {
+        cloudReachable = true;
         lastGlobalSyncError = null;
     }
 
@@ -1455,14 +1538,22 @@ export async function flushPendingCloudSync() {
                 ? error.message
                 : String(error || "Unknown cloud sync error.");
 
-        // Temporary go-live diagnostic: expose the exact Supabase/PostgREST
-        // failure in the existing Cloud Sync status area so we can identify
-        // the rejected sale field/policy without needing browser developer
-        // tools on the work tablet.
-        updateCloudUploadStatus(
-            `SYNC ERROR: ${message}`,
-            true
-        );
+        if (looksLikeConnectivityError(error)) {
+            cloudReachable = false;
+            lastGlobalSyncError = null;
+
+            updateCloudUploadStatus(
+                "Offline — cloud changes will retry automatically when the connection returns.",
+                false
+            );
+
+            updateGlobalCloudIndicator();
+        } else {
+            updateCloudUploadStatus(
+                `SYNC ERROR: ${message}`,
+                true
+            );
+        }
 
         return false;
     } finally {
@@ -1558,6 +1649,13 @@ export function initialiseCloudSync() {
     migrateLegacyPendingSalesQueue();
     updateCloudUploadCounts();
     updateGlobalCloudIndicator();
+
+    window.setTimeout(
+        function () {
+            checkCloudReachability();
+        },
+        500
+    );
 
     /*
      * If the browser/app was closed with pending work, the localStorage queue
@@ -1674,13 +1772,22 @@ export function initialiseCloudSync() {
     }
 
     window.addEventListener("online", function () {
-        // On mobile, the browser can announce "online" slightly before the
-        // network is actually usable. Retry immediately and a few seconds
-        // later so Staff sales do not need an Admin login to wake the sync.
-        retryPendingCloudWork();
+        lastGlobalSyncError = null;
+
+        checkCloudReachability().then(function (reachable) {
+            if (reachable) {
+                retryPendingCloudWork();
+            }
+        });
 
         window.setTimeout(retryPendingCloudWork, 2000);
         window.setTimeout(retryPendingCloudWork, 8000);
+    });
+
+    window.addEventListener("offline", function () {
+        cloudReachable = false;
+        lastGlobalSyncError = null;
+        updateGlobalCloudIndicator();
     });
 
     document.addEventListener("cloud-authenticated", async function () {
@@ -1714,6 +1821,15 @@ export function initialiseCloudSync() {
             retryPendingCloudWork();
         }
     }, 5000);
+
+    /*
+     * Safari/iPadOS may not update navigator.onLine until a request occurs.
+     * This tiny heartbeat keeps the global cloud pill accurate while idle.
+     */
+    window.setInterval(
+        checkCloudReachability,
+        5000
+    );
 
     /*
      * Multi-device stock visibility.
