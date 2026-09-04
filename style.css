@@ -2221,3 +2221,62 @@ select:focus {
         align-items: flex-start;
     }
 }
+
+
+/* ==================================================
+   Priority 12 — Installed PWA / standalone safe areas
+================================================== */
+
+/*
+ * viewport-fit=cover lets installed iOS web apps use the full screen.
+ * These env() values are zero on devices that do not need safe areas.
+ */
+.app-header {
+    padding-top: max(16px, env(safe-area-inset-top));
+    padding-left: max(28px, env(safe-area-inset-left));
+    padding-right: max(28px, env(safe-area-inset-right));
+}
+
+.login-page {
+    padding-top: max(24px, env(safe-area-inset-top));
+    padding-right: max(24px, env(safe-area-inset-right));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    padding-left: max(24px, env(safe-area-inset-left));
+}
+
+.app-layout {
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+.sidebar {
+    padding-left: max(18px, env(safe-area-inset-left));
+}
+
+.content-area {
+    padding-right: max(30px, env(safe-area-inset-right));
+}
+
+/* Standalone mode is the installed app experience on iOS and Android. */
+@media (display-mode: standalone) {
+    html,
+    body,
+    .app-screen {
+        min-height: 100%;
+        min-height: 100dvh;
+    }
+
+    body {
+        overscroll-behavior-y: none;
+    }
+}
+
+@media (max-width: 900px) {
+    .content-area {
+        padding-right: max(18px, env(safe-area-inset-right));
+        padding-left: max(18px, env(safe-area-inset-left));
+    }
+
+    .sidebar {
+        padding-right: max(18px, env(safe-area-inset-right));
+    }
+}
