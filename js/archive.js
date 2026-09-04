@@ -145,6 +145,28 @@ function statusLabel(status) {
 }
 
 
+function displayArchiveDateOnly(value) {
+    if (!value) return "—";
+
+    const date =
+        value instanceof Date
+            ? value
+            : new Date(
+                /^\d{4}-\d{2}-\d{2}$/.test(String(value))
+                    ? `${value}T12:00:00`
+                    : value
+            );
+
+    if (Number.isNaN(date.getTime())) return "—";
+
+    return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+    });
+}
+
+
 function closeDateDisplay(production) {
     /*
      * auto_close_date is exclusive, so the last selling day is the previous
@@ -1617,17 +1639,17 @@ function renderProductionList(rows) {
                 </span>
 
                                         <span class="archive-production-dates">
-                            ${displayDate(production.startDate)}
-                            —
-                            ${displayDate(
-                                new Date(
-                                    new Date(
-                                        `${production.autoCloseDate}T12:00:00`
-                                    ).getTime() -
-                                    86400000
-                                )
-                            )}
-                        </span>
+                    ${escapeHTML(displayArchiveDateOnly(production.startDate))}
+                    –
+                    ${escapeHTML(
+                        displayArchiveDateOnly(
+                            new Date(
+                                new Date(`${production.autoCloseDate}T12:00:00`).getTime() -
+                                86400000
+                            )
+                        )
+                    )}
+                </span>
 
                 <span class="archive-status-badge ${escapeHTML(production.status)}">
                     ${escapeHTML(statusLabel(production.status))}
