@@ -135,6 +135,17 @@ export const dom = {
     archiveUnassignedCount: document.getElementById("archive-unassigned-count"),
     archiveProductionList: document.getElementById("archive-production-list"),
 
+    productionProductsModal: document.getElementById("production-products-modal"),
+    productionProductsModalTitle: document.getElementById("production-products-modal-title"),
+    productionProductsProductionLabel: document.getElementById("production-products-production-label"),
+    productionProductsSelectAll: document.getElementById("production-products-select-all"),
+    productionProductsSelectedCount: document.getElementById("production-products-selected-count"),
+    productionProductsList: document.getElementById("production-products-list"),
+    productionProductsError: document.getElementById("production-products-error"),
+    closeProductionProductsModalButton: document.getElementById("close-production-products-modal"),
+    cancelProductionProductsButton: document.getElementById("cancel-production-products-button"),
+    saveProductionProductsButton: document.getElementById("save-production-products-button"),
+
     sessionAssignmentModal: document.getElementById("session-assignment-modal"),
     sessionAssignmentModalTitle: document.getElementById("session-assignment-modal-title"),
     sessionAssignmentProductionLabel: document.getElementById("session-assignment-production-label"),

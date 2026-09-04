@@ -51,7 +51,7 @@
         href="icons/icon-192.png"
     >
 
-    <link rel="stylesheet" href="style.css?v=priority14d1">
+    <link rel="stylesheet" href="style.css?v=priority14e2">
 </head>
 
 <body>
@@ -1692,6 +1692,116 @@
 
 
     <!-- ==================================================
+         Manage Production Products popup
+    ================================================== -->
+    <div
+        id="production-products-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box production-products-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="production-products-modal-title"
+        >
+
+            <div class="modal-header">
+
+                <div>
+                    <h2 id="production-products-modal-title">
+                        Manage Products
+                    </h2>
+
+                    <p
+                        id="production-products-production-label"
+                        class="session-assignment-production-label"
+                    ></p>
+                </div>
+
+                <button
+                    type="button"
+                    id="close-production-products-modal"
+                    class="modal-close-button"
+                    aria-label="Close product management"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <div class="session-assignment-toolbar">
+
+                <label class="session-select-all">
+
+                    <input
+                        type="checkbox"
+                        id="production-products-select-all"
+                    >
+
+                    <span>
+                        Select All
+                    </span>
+
+                </label>
+
+                <span id="production-products-selected-count">
+                    0 selected
+                </span>
+
+            </div>
+
+
+            <p class="field-help production-products-help">
+                Tick the products that belong to this Production. Unticked products remain or return to Unassigned.
+            </p>
+
+
+            <div
+                id="production-products-list"
+                class="production-products-list"
+            >
+                <div class="archive-empty-message">
+                    No products available.
+                </div>
+            </div>
+
+
+            <p
+                id="production-products-error"
+                class="form-error"
+                aria-live="polite"
+            ></p>
+
+
+            <div class="modal-actions">
+
+                <button
+                    type="button"
+                    id="cancel-production-products-button"
+                    class="secondary-button"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="button"
+                    id="save-production-products-button"
+                    class="save-product-button"
+                >
+                    Save Products
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
          Assign historical sessions popup
     ================================================== -->
     <div
@@ -2277,7 +2387,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=priority14e1"></script>
+<script type="module" src="js/app.js?v=priority14e2"></script>
 
 </body>
 </html>

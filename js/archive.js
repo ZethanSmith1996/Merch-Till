@@ -14,6 +14,9 @@ let archiveRefreshTimer = null;
 let sessionAssignmentProduction = null;
 let sessionAssignmentEligibleSessions = [];
 
+let productionProductsProduction = null;
+let productionProductChoices = [];
+
 const productionReportCache = new Map();
 const productionReportFilters = new Map();
 const expandedTransactionIds = new Set();
@@ -1664,9 +1667,16 @@ function renderProductionList(rows) {
                         <strong>${production.productsSold}</strong>
                     </div>
 
-                    <div class="archive-detail-stat">
-                        <span>Products</span>
-                        <strong>${production.productCount}</strong>
+                    <div class="archive-detail-stat archive-products-stat">
+                        <button
+                            type="button"
+                            class="archive-products-stat-button"
+                            data-manage-production-products="${production.id}"
+                        >
+                            <span>Products</span>
+                            <strong>${production.productCount}</strong>
+                            <small>Manage Products</small>
+                        </button>
                     </div>
 
                 </div>
@@ -1695,6 +1705,19 @@ function renderProductionList(rows) {
                 actions,
                 production
             );
+
+            details
+                .querySelector(
+                    `[data-manage-production-products="${production.id}"]`
+                )
+                ?.addEventListener(
+                    "click",
+                    function () {
+                        openProductionProductsModal(
+                            production
+                        );
+                    }
+                );
 
             if (expanded) {
                 window.setTimeout(
@@ -2176,6 +2199,404 @@ async function deleteProduction(
                     : String(error)
             )
         );
+    }
+}
+
+
+function normaliseProductChoice(row) {
+    return {
+        id: Number(row.id),
+        name: row.name || "",
+        variantName:
+            row.variant_name || null,
+        price:
+            Number(row.price) || 0,
+        stock:
+            Number(row.stock) || 0,
+        productionId:
+            row.production_id === null ||
+            row.production_id === undefined
+                ? null
+                : Number(row.production_id)
+    };
+}
+
+
+async function openProductionProductsModal(
+    production
+) {
+    if (!dom.productionProductsModal) {
+        return;
+    }
+
+    productionProductsProduction =
+        production;
+
+    dom.productionProductsModalTitle.textContent =
+        "Manage Products";
+
+    dom.productionProductsProductionLabel.textContent =
+        `${production.name} · ${statusLabel(production.status)}`;
+
+    dom.productionProductsError.textContent =
+        "";
+
+    dom.productionProductsList.innerHTML =
+        '<div class="archive-empty-message">Loading Products…</div>';
+
+    dom.productionProductsModal.hidden =
+        false;
+
+    try {
+        const response =
+            await archiveRequest(
+                "rpc/get_production_product_choices",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                        "Accept":
+                            "application/json"
+                    },
+                    body:
+                        JSON.stringify({
+                            p_production_id:
+                                production.id
+                        })
+                }
+            );
+
+        productionProductChoices =
+            (await response.json())
+                .map(
+                    normaliseProductChoice
+                );
+
+        renderProductionProductChoices();
+
+    } catch (error) {
+        dom.productionProductsError.textContent =
+            error instanceof Error
+                ? error.message
+                : String(error);
+    }
+}
+
+
+function closeProductionProductsModal() {
+    if (!dom.productionProductsModal) {
+        return;
+    }
+
+    dom.productionProductsModal.hidden =
+        true;
+
+    productionProductsProduction =
+        null;
+
+    productionProductChoices =
+        [];
+
+    dom.productionProductsError.textContent =
+        "";
+}
+
+
+function selectedProductionProductIds() {
+    return Array.from(
+        dom.productionProductsList
+            ?.querySelectorAll(
+                'input[data-product-choice-id]:checked'
+            ) || []
+    ).map(
+        function (input) {
+            return Number(
+                input.dataset
+                    .productChoiceId
+            );
+        }
+    );
+}
+
+
+function updateProductionProductSelectionState() {
+    const selected =
+        selectedProductionProductIds();
+
+    const total =
+        productionProductChoices
+            .length;
+
+    dom.productionProductsSelectedCount.textContent =
+        `${selected.length} selected`;
+
+    dom.productionProductsSelectAll.checked =
+        total > 0 &&
+        selected.length === total;
+
+    dom.productionProductsSelectAll.indeterminate =
+        selected.length > 0 &&
+        selected.length < total;
+}
+
+
+function renderProductionProductChoices() {
+    if (
+        productionProductChoices.length ===
+        0
+    ) {
+        dom.productionProductsList.innerHTML =
+            '<div class="archive-empty-message">No assigned or Unassigned products are available.</div>';
+
+        updateProductionProductSelectionState();
+        return;
+    }
+
+    const productionId =
+        Number(
+            productionProductsProduction.id
+        );
+
+    dom.productionProductsList.innerHTML =
+        productionProductChoices
+            .map(
+                function (product) {
+                    const assigned =
+                        product.productionId ===
+                        productionId;
+
+                    const displayName =
+                        product.variantName
+                            ? `${product.name} — ${product.variantName}`
+                            : product.name;
+
+                    return `
+                        <label class="production-product-row">
+
+                            <input
+                                type="checkbox"
+                                data-product-choice-id="${product.id}"
+                                ${assigned ? "checked" : ""}
+                            >
+
+                            <span class="production-product-name">
+                                <strong>
+                                    ${escapeHTML(displayName)}
+                                </strong>
+
+                                <small>
+                                    Product ID ${product.id}
+                                </small>
+                            </span>
+
+                            <span class="production-product-value">
+                                <strong>
+                                    ${currencyFormatter.format(product.price)}
+                                </strong>
+
+                                <small>
+                                    Price
+                                </small>
+                            </span>
+
+                            <span class="production-product-value">
+                                <strong>
+                                    ${product.stock}
+                                </strong>
+
+                                <small>
+                                    Stock
+                                </small>
+                            </span>
+
+                            <span class="production-product-assignment ${assigned ? "assigned" : ""}">
+                                ${assigned ? "Assigned" : "Unassigned"}
+                            </span>
+
+                        </label>
+                    `;
+                }
+            )
+            .join("");
+
+    dom.productionProductsList
+        .querySelectorAll(
+            'input[data-product-choice-id]'
+        )
+        .forEach(
+            function (input) {
+                input.addEventListener(
+                    "change",
+                    updateProductionProductSelectionState
+                );
+            }
+        );
+
+    updateProductionProductSelectionState();
+}
+
+
+function toggleSelectAllProductionProducts() {
+    const checked =
+        Boolean(
+            dom.productionProductsSelectAll
+                .checked
+        );
+
+    dom.productionProductsList
+        ?.querySelectorAll(
+            'input[data-product-choice-id]'
+        )
+        .forEach(
+            function (input) {
+                input.checked =
+                    checked;
+            }
+        );
+
+    updateProductionProductSelectionState();
+}
+
+
+async function saveProductionProducts() {
+    const production =
+        productionProductsProduction;
+
+    if (!production) {
+        return;
+    }
+
+    const selectedIds =
+        selectedProductionProductIds();
+
+    const originallyAssignedIds =
+        productionProductChoices
+            .filter(
+                function (product) {
+                    return (
+                        product.productionId ===
+                        Number(
+                            production.id
+                        )
+                    );
+                }
+            )
+            .map(
+                function (product) {
+                    return product.id;
+                }
+            );
+
+    const selectedSet =
+        new Set(
+            selectedIds.map(String)
+        );
+
+    const originalSet =
+        new Set(
+            originallyAssignedIds.map(
+                String
+            )
+        );
+
+    const addedCount =
+        selectedIds.filter(
+            function (id) {
+                return !originalSet.has(
+                    String(id)
+                );
+            }
+        ).length;
+
+    const removedCount =
+        originallyAssignedIds.filter(
+            function (id) {
+                return !selectedSet.has(
+                    String(id)
+                );
+            }
+        ).length;
+
+    if (
+        addedCount === 0 &&
+        removedCount === 0
+    ) {
+        closeProductionProductsModal();
+        return;
+    }
+
+    const confirmed =
+        window.confirm(
+            `Update Products for "${production.name}"?\n\n` +
+            `${addedCount} product${addedCount === 1 ? "" : "s"} will be added.\n` +
+            `${removedCount} product${removedCount === 1 ? "" : "s"} will be returned to Unassigned.\n\n` +
+            "Existing sales and transaction history will not be changed."
+        );
+
+    if (!confirmed) {
+        return;
+    }
+
+    dom.saveProductionProductsButton.disabled =
+        true;
+
+    dom.productionProductsError.textContent =
+        "";
+
+    try {
+        const response =
+            await archiveRequest(
+                "rpc/set_production_products",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                        "Accept":
+                            "application/json"
+                    },
+                    body:
+                        JSON.stringify({
+                            p_production_id:
+                                production.id,
+                            p_selected_product_ids:
+                                selectedIds
+                        })
+                }
+            );
+
+        const result =
+            await response.json();
+
+        closeProductionProductsModal();
+
+        window.alert(
+            `Products updated for "${production.name}".\n\n` +
+            `Added: ${Number(result.products_added) || 0}\n` +
+            `Returned to Unassigned: ${Number(result.products_removed) || 0}`
+        );
+
+        productionReportCache.delete(
+            production.id
+        );
+
+        await loadArchiveData();
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "production-data-changed"
+            )
+        );
+
+    } catch (error) {
+        dom.productionProductsError.textContent =
+            error instanceof Error
+                ? error.message
+                : String(error);
+    } finally {
+        dom.saveProductionProductsButton.disabled =
+            false;
     }
 }
 
@@ -2698,6 +3119,44 @@ export function initialiseArchive() {
         }
     );
 
+    dom.productionProductsSelectAll
+        ?.addEventListener(
+            "change",
+            toggleSelectAllProductionProducts
+        );
+
+    dom.saveProductionProductsButton
+        ?.addEventListener(
+            "click",
+            saveProductionProducts
+        );
+
+    dom.closeProductionProductsModalButton
+        ?.addEventListener(
+            "click",
+            closeProductionProductsModal
+        );
+
+    dom.cancelProductionProductsButton
+        ?.addEventListener(
+            "click",
+            closeProductionProductsModal
+        );
+
+    dom.productionProductsModal
+        ?.addEventListener(
+            "click",
+            function (event) {
+                if (
+                    event.target ===
+                    dom.productionProductsModal
+                ) {
+                    closeProductionProductsModal();
+                }
+            }
+        );
+
+
     dom.sessionAssignmentSelectAll
         ?.addEventListener(
             "change",
@@ -2741,6 +3200,14 @@ export function initialiseArchive() {
             if (
                 event.key !== "Escape"
             ) {
+                return;
+            }
+
+            if (
+                dom.productionProductsModal &&
+                !dom.productionProductsModal.hidden
+            ) {
+                closeProductionProductsModal();
                 return;
             }
 
