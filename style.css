@@ -2490,3 +2490,19 @@ select:focus {
 .report-money-breakdown .report-discount-summary {
     margin: 0 !important;
 }
+
+
+/* Priority 13B.1 — adaptive Cash/Card report rows */
+.report-payment-methods {
+    display: grid;
+    gap: 5px;
+}
+
+.report-payment-methods[hidden] {
+    display: none;
+}
+
+.report-payment-methods > span {
+    color: var(--grey-700);
+    font-size: 13px;
+}

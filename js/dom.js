@@ -130,6 +130,7 @@ export const dom = {
     applyReportRangeButton: document.getElementById("apply-report-range-button"),
     reportSessionButtons: document.getElementById("report-session-buttons"),
     reportRevenue: document.getElementById("report-revenue"),
+    reportPaymentBreakdown: document.getElementById("report-payment-breakdown"),
     reportCash: document.getElementById("report-cash"),
     reportCard: document.getElementById("report-card"),
     reportDiscounts: document.getElementById("report-discounts"),

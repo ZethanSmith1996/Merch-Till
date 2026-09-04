@@ -530,6 +530,12 @@ export function renderReports() {
         return sum + Number(sale.discountAmount || 0);
     }, 0);
 
+    const hasPaymentData = activeSales.some(function (sale) {
+        return ["cash", "card", "split"].includes(
+            sale.paymentMethod
+        );
+    });
+
     const cashTaken = activeSales.reduce(function (sum, sale) {
         return sum + Number(sale.cashAmount || 0);
     }, 0);
@@ -543,6 +549,12 @@ export function renderReports() {
     }, 0);
 
     dom.reportRevenue.textContent = currencyFormatter.format(revenue);
+
+    if (dom.reportPaymentBreakdown) {
+        dom.reportPaymentBreakdown.hidden =
+            !hasPaymentData;
+    }
+
     dom.reportCash.textContent = currencyFormatter.format(cashTaken);
     dom.reportCard.textContent = currencyFormatter.format(cardTaken);
     dom.reportDiscounts.textContent = currencyFormatter.format(discounts);
