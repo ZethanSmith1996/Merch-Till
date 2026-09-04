@@ -8,16 +8,36 @@ import { getValidCloudAccessToken } from "./auth.js?v=step3b";
 import { announceProductsChanged, escapeHTML } from "./utils.js";
 import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
 
-function getNextProductId(products = state.products) {
-    if (products.length === 0) {
-        return 1;
-    }
+function getNextProductId() {
+    /*
+     * Product IDs used to be max(local IDs)+1. Once catalogues are scoped by
+     * Production that could collide with a hidden historical Product.
+     *
+     * Use the same safe timestamp-style bigint strategy as modern Sale IDs.
+     */
+    return (
+        Date.now() * 1000 +
+        Math.floor(
+            Math.random() * 1000
+        )
+    );
+}
 
-    return Math.max(
-        ...products.map(function (product) {
-            return Number(product.id) || 0;
-        })
-    ) + 1;
+
+function currentProductProductionId() {
+    return state.currentProduction
+        ? Number(state.currentProduction.id)
+        : null;
+}
+
+
+function productContextQuery() {
+    const productionId =
+        currentProductProductionId();
+
+    return productionId === null
+        ? "products?select=*&production_id=is.null&order=sort_order.asc,id.asc"
+        : `products?select=*&production_id=eq.${encodeURIComponent(productionId)}&order=sort_order.asc,id.asc`;
 }
 
 
@@ -256,6 +276,8 @@ function mapProductForCloud(product) {
                 : null,
         tile_color:
             product.tileColor || "default",
+        production_id:
+            product.productionId ?? null,
         cloud_updated_at:
             new Date().toISOString()
     };
@@ -288,14 +310,19 @@ function unmapCloudProduct(row) {
             }
             : {}),
         tileColor:
-            row.tile_color || "default"
+            row.tile_color || "default",
+        productionId:
+            row.production_id === null ||
+            row.production_id === undefined
+                ? null
+                : Number(row.production_id)
     };
 }
 
 async function fetchAuthoritativeCloudProducts() {
     const response =
         await productCloudRequest(
-            "products?select=*&order=sort_order.asc,id.asc",
+            productContextQuery(),
             {
                 method: "GET",
                 headers: {
@@ -1210,9 +1237,7 @@ async function saveProduct(event) {
             } else {
                 productsToSave = [{
                     id:
-                        getNextProductId(
-                            authoritativeProducts
-                        ),
+                        getNextProductId(),
                     name,
                     price,
                     stock,
@@ -1220,7 +1245,9 @@ async function saveProduct(event) {
                         getNextSortOrder(
                             authoritativeProducts
                         ),
-                    tileColor
+                    tileColor,
+                    productionId:
+                        currentProductProductionId()
                 }];
             }
 
@@ -1258,9 +1285,7 @@ async function saveProduct(event) {
                       : [];
 
             let nextId =
-                getNextProductId(
-                    authoritativeProducts
-                );
+                getNextProductId();
 
             const usedIds =
                 new Set();
@@ -1310,7 +1335,13 @@ async function saveProduct(event) {
                                 variant.order,
                             sortOrder:
                                 existingSortOrder,
-                            tileColor
+                            tileColor,
+                            productionId:
+                                (
+                                    existingGroupProducts[0]
+                                        ?.productionId
+                                ) ??
+                                currentProductProductionId()
                         };
                     }
                 );

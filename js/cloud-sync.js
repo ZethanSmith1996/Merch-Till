@@ -63,7 +63,12 @@ function unmapProduct(row) {
         ...(row.sort_order !== null && row.sort_order !== undefined
             ? { sortOrder: Number(row.sort_order) }
             : {}),
-        tileColor: row.tile_color || "default"
+        tileColor: row.tile_color || "default",
+        productionId:
+            row.production_id === null ||
+            row.production_id === undefined
+                ? null
+                : Number(row.production_id)
     };
 }
 
@@ -136,6 +141,8 @@ function mapProduct(product) {
             ? product.sortOrder
             : null,
         tile_color: product.tileColor || "default",
+        production_id:
+            product.productionId ?? null,
         cloud_updated_at: new Date().toISOString()
     };
 }
@@ -271,27 +278,53 @@ async function deleteCloudProduct(productId) {
 }
 
 async function syncProductsSnapshot() {
-    const products = state.products.map(mapProduct);
-    await upsertRows("products", products);
+    const products =
+        state.products.map(
+            mapProduct
+        );
 
-    const response = await cloudRequest("products?select=id", {
-        method: "GET",
-        headers: {
-            "Accept": "application/json"
-        }
-    });
+    await upsertRows(
+        "products",
+        products
+    );
 
-    const cloudProducts = await response.json();
-    const localIds = new Set(state.products.map(function (product) {
-        return String(product.id);
-    }));
+    /*
+     * Critical Production safety:
+     * compare only with the CURRENT live catalogue. Hidden products belonging
+     * to another Production must never be treated as stale and deleted.
+     */
+    const cloudProducts =
+        await fetchLiveProductRows(
+            "id"
+        );
 
-    const staleCloudProducts = cloudProducts.filter(function (product) {
-        return !localIds.has(String(product.id));
-    });
+    const localIds =
+        new Set(
+            state.products.map(
+                function (product) {
+                    return String(
+                        product.id
+                    );
+                }
+            )
+        );
 
-    for (const product of staleCloudProducts) {
-        await deleteCloudProduct(product.id);
+    const staleCloudProducts =
+        cloudProducts.filter(
+            function (product) {
+                return !localIds.has(
+                    String(product.id)
+                );
+            }
+        );
+
+    for (
+        const product of
+        staleCloudProducts
+    ) {
+        await deleteCloudProduct(
+            product.id
+        );
     }
 }
 
@@ -508,9 +541,7 @@ export async function refreshSharedProductsFromCloud() {
 
     try {
         const productRows =
-            await fetchCloudRows(
-                "products"
-            );
+            await fetchLiveProductRows();
 
         const products =
             productRows
@@ -764,6 +795,100 @@ async function fetchCloudRows(tableName, select = "*") {
     );
 
     return response.json();
+}
+
+
+function currentLiveProductionId() {
+    return state.currentProduction
+        ? Number(state.currentProduction.id)
+        : null;
+}
+
+
+function liveProductFilterQuery(
+    select = "*"
+) {
+    const productionId =
+        currentLiveProductionId();
+
+    const productionFilter =
+        productionId === null
+            ? "production_id=is.null"
+            : `production_id=eq.${encodeURIComponent(productionId)}`;
+
+    return (
+        `products?select=${encodeURIComponent(select)}` +
+        `&${productionFilter}` +
+        "&order=sort_order.asc,id.asc"
+    );
+}
+
+
+async function fetchLiveProductRows(
+    select = "*"
+) {
+    const response =
+        await cloudRequest(
+            liveProductFilterQuery(
+                select
+            ),
+            {
+                method: "GET",
+                headers: {
+                    "Accept":
+                        "application/json"
+                }
+            }
+        );
+
+    return response.json();
+}
+
+
+async function refreshLiveProductsFromCloud() {
+    if (!navigator.onLine) {
+        return false;
+    }
+
+    try {
+        const productRows =
+            await fetchLiveProductRows();
+
+        const products =
+            productRows
+                .map(unmapProduct)
+                .sort(compareProducts);
+
+        await replaceProductCacheInDatabase(
+            products
+        );
+
+        state.products =
+            products;
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "products-changed",
+                {
+                    detail: {
+                        cloudConfirmed:
+                            true,
+                        productionContext:
+                            true
+                    }
+                }
+            )
+        );
+
+        return true;
+    } catch (error) {
+        console.warn(
+            "Production product context refresh failed:",
+            error
+        );
+
+        return false;
+    }
 }
 
 
@@ -1125,8 +1250,11 @@ export async function refreshLocalCacheFromCloud() {
         // Staff do not have permission to browse historic sales. They only
         // need the shared product catalogue and current session to operate
         // the Till. Admins continue to download the full reporting dataset.
-        const productRows = await fetchCloudRows("products");
-        const sessionRows = await fetchCloudRows("sessions");
+        const productRows =
+            await fetchLiveProductRows();
+
+        const sessionRows =
+            await fetchCloudRows("sessions");
         const saleRows = staffMode ? null : await fetchCloudRows("sales");
 
         const products = productRows
@@ -1742,6 +1870,11 @@ async function uploadExistingTillData() {
         dom.uploadCloudDataButton.textContent = "Upload Existing Till Data";
     }
 }
+
+export {
+    refreshLiveProductsFromCloud
+};
+
 
 export function initialiseCloudSync() {
     migrateLegacyPendingSalesQueue();

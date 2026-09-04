@@ -12,7 +12,7 @@ import {
 import {
     initialiseProductManagement,
     renderProductsTable
-} from "./products.js?v=priority10c";
+} from "./products.js?v=priority14e1";
 import {
     initialiseTill,
     renderCart,
@@ -32,7 +32,12 @@ import {
     initialiseUserManagement,
     renderUsersTable
 } from "./users.js?v=priority14a";
-import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority14b";
+import {
+    initialiseCloudSync,
+    flushPendingCloudSync,
+    refreshLocalCacheFromCloud,
+    refreshLiveProductsFromCloud
+} from "./cloud-sync.js?v=priority14e1";
 import { initialiseAuditLog } from "./audit-log.js?v=priority10c1";
 import { initialiseOptions, refreshOptionsFromCloud } from "./options.js?v=priority11b";
 import { initialiseProductions, refreshCurrentProduction } from "./productions.js?v=priority14b";
@@ -105,6 +110,11 @@ async function startApplication() {
     document.addEventListener(
         "production-changed",
         async function (event) {
+            await refreshLiveProductsFromCloud();
+
+            refreshProductDisplays();
+            refreshTillAvailability();
+
             const autoClosedSessionIds =
                 event.detail
                     ?.autoClosedSessionIds ||
