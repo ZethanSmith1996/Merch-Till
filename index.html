@@ -158,6 +158,15 @@
                 <button
                     type="button"
                     class="nav-button"
+                    data-screen="audit-section"
+                    id="audit-nav-button"
+                >
+                    Audit Log
+                </button>
+
+                <button
+                    type="button"
+                    class="nav-button"
                     data-screen="users-section"
                 >
                     Users
@@ -643,6 +652,201 @@
                 <!-- ==================================================
                      Users section
                 ================================================== -->
+                <!-- ==================================================
+                     Audit Log section
+                ================================================== -->
+                <section
+                    id="audit-section"
+                    class="app-section"
+                    hidden
+                >
+
+                    <div class="section-heading">
+
+                        <div>
+                            <h2>Audit Log</h2>
+
+                            <p>
+                                Permanent record of Till activity. Audit entries cannot be edited or deleted.
+                            </p>
+                        </div>
+
+                    </div>
+
+
+                    <div class="audit-filter-bar">
+
+                        <div class="form-group">
+                            <label for="audit-from-date">
+                                From
+                            </label>
+
+                            <input
+                                type="date"
+                                id="audit-from-date"
+                            >
+                        </div>
+
+
+                        <div class="form-group">
+                            <label for="audit-to-date">
+                                To
+                            </label>
+
+                            <input
+                                type="date"
+                                id="audit-to-date"
+                            >
+                        </div>
+
+
+                        <div class="form-group">
+                            <label for="audit-user-filter">
+                                User
+                            </label>
+
+                            <select id="audit-user-filter">
+                                <option value="">
+                                    All Users
+                                </option>
+                            </select>
+                        </div>
+
+
+                        <div class="form-group">
+                            <label for="audit-action-filter">
+                                Action
+                            </label>
+
+                            <select id="audit-action-filter">
+                                <option value="">
+                                    All Actions
+                                </option>
+
+                                <option value="sale">
+                                    Sale
+                                </option>
+
+                                <option value="void">
+                                    Void
+                                </option>
+
+                                <option value="discount">
+                                    Discount
+                                </option>
+
+                                <option value="stock_change">
+                                    Stock Change
+                                </option>
+
+                                <option value="product_change">
+                                    Product Change
+                                </option>
+
+                                <option value="user_management">
+                                    User Management
+                                </option>
+
+                                <option value="trading_session">
+                                    Trading Session
+                                </option>
+
+                                <option value="system_sync">
+                                    System / Sync
+                                </option>
+                            </select>
+                        </div>
+
+
+                        <div class="form-group audit-search-group">
+                            <label for="audit-search">
+                                Search
+                            </label>
+
+                            <input
+                                type="search"
+                                id="audit-search"
+                                placeholder="Search messages"
+                                autocomplete="off"
+                            >
+                        </div>
+
+
+                        <div class="form-group">
+                            <label>&nbsp;</label>
+
+                            <button
+                                type="button"
+                                id="audit-reset-filters"
+                            >
+                                Reset Filters
+                            </button>
+                        </div>
+
+                    </div>
+
+
+                    <div class="audit-summary-row">
+
+                        <p id="audit-event-count">
+                            Displaying 0 events
+                        </p>
+
+                        <label class="audit-sort-control">
+
+                            <span>
+                                Sort By:
+                            </span>
+
+                            <select id="audit-sort-order">
+                                <option
+                                    value="newest"
+                                    selected
+                                >
+                                    Most Recent
+                                </option>
+
+                                <option value="oldest">
+                                    Oldest First
+                                </option>
+                            </select>
+
+                        </label>
+
+                    </div>
+
+
+                    <p
+                        id="audit-status"
+                        class="cloud-upload-status"
+                        aria-live="polite"
+                    >
+                        Open the Audit Log to load events.
+                    </p>
+
+
+                    <div class="audit-display-box">
+
+                        <div class="audit-log-header">
+                            <span>Date</span>
+                            <span>Time</span>
+                            <span>Message</span>
+                        </div>
+
+                        <div
+                            id="audit-log-rows"
+                            class="audit-log-rows"
+                        >
+                            <div class="audit-empty-message">
+                                No audit events to display.
+                            </div>
+                        </div>
+
+                    </div>
+
+                </section>
+
+
                 <section
                     id="users-section"
                     class="app-section"
@@ -1300,7 +1504,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=priority8a2"></script>
+<script type="module" src="js/app.js?v=priority10b"></script>
 
 </body>
 </html>

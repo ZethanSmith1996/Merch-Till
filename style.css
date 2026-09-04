@@ -1883,3 +1883,159 @@ select:focus {
         padding: 6px 9px;
     }
 }
+
+
+/* ==================================================
+   Audit Log
+================================================== */
+
+.audit-filter-bar {
+    display: grid;
+    grid-template-columns:
+        minmax(125px, 0.8fr)
+        minmax(125px, 0.8fr)
+        minmax(150px, 1fr)
+        minmax(170px, 1fr)
+        minmax(210px, 1.5fr)
+        auto;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 14px;
+}
+
+.audit-filter-bar .form-group {
+    margin: 0;
+}
+
+.audit-filter-bar input,
+.audit-filter-bar select {
+    width: 100%;
+}
+
+.audit-search-group {
+    min-width: 0;
+}
+
+.audit-summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 10px 0 12px;
+}
+
+.audit-summary-row p {
+    margin: 0;
+    font-weight: 700;
+}
+
+.audit-sort-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    font-weight: 700;
+}
+
+.audit-sort-control select {
+    min-width: 150px;
+}
+
+.audit-display-box {
+    overflow: hidden;
+    border: 1px solid var(--grey-300);
+    border-radius: 10px;
+    background: var(--white);
+}
+
+.audit-log-header,
+.audit-log-row {
+    display: grid;
+    grid-template-columns:
+        115px
+        95px
+        minmax(0, 1fr);
+    column-gap: 14px;
+    align-items: start;
+}
+
+.audit-log-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    font-weight: 800;
+}
+
+.audit-log-rows {
+    min-height: 420px;
+    max-height: 62vh;
+    overflow-y: auto;
+}
+
+.audit-log-row {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--grey-200);
+}
+
+.audit-log-row:last-child {
+    border-bottom: 0;
+}
+
+.audit-log-date,
+.audit-log-time {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.audit-log-message {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.audit-empty-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 250px;
+    padding: 30px;
+    color: var(--grey-600);
+    text-align: center;
+}
+
+@media (max-width: 1000px) {
+    .audit-filter-bar {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+
+    .audit-search-group {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 650px) {
+    .audit-filter-bar {
+        grid-template-columns: 1fr;
+    }
+
+    .audit-search-group {
+        grid-column: auto;
+    }
+
+    .audit-summary-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .audit-log-header,
+    .audit-log-row {
+        grid-template-columns:
+            92px
+            72px
+            minmax(0, 1fr);
+        column-gap: 8px;
+        padding-left: 10px;
+        padding-right: 10px;
+        font-size: 13px;
+    }
+}
