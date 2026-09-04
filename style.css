@@ -1789,3 +1789,97 @@ select:focus {
         flex-direction: column;
     }
 }
+
+
+/* ==================================================
+   Global cloud status indicator
+================================================== */
+
+.app-brand {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.global-cloud-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 32px;
+    padding: 6px 11px;
+    border: 2px solid var(--grey-300);
+    border-radius: 999px;
+    background: var(--white);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.global-cloud-status-dot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 50%;
+    background: #6b7280;
+}
+
+.global-cloud-status-pill.cloud-synced {
+    border-color: #86efac;
+    background: #f0fdf4;
+    color: #166534;
+}
+
+.global-cloud-status-pill.cloud-synced .global-cloud-status-dot {
+    background: #16a34a;
+}
+
+.global-cloud-status-pill.cloud-syncing {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.global-cloud-status-pill.cloud-syncing .global-cloud-status-dot {
+    background: #2563eb;
+}
+
+.global-cloud-status-pill.cloud-offline {
+    border-color: #fcd34d;
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.global-cloud-status-pill.cloud-offline .global-cloud-status-dot {
+    background: #d97706;
+}
+
+.global-cloud-status-pill.cloud-error {
+    border-color: #fca5a5;
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.global-cloud-status-pill.cloud-error .global-cloud-status-dot {
+    background: #dc2626;
+}
+
+.global-cloud-status-pill.cloud-local,
+.global-cloud-status-pill.cloud-checking {
+    border-color: var(--grey-300);
+    background: var(--grey-100);
+    color: var(--grey-700);
+}
+
+.global-cloud-status-pill.cloud-local .global-cloud-status-dot,
+.global-cloud-status-pill.cloud-checking .global-cloud-status-dot {
+    background: #6b7280;
+}
+
+@media (max-width: 700px) {
+    .global-cloud-status-pill {
+        font-size: 12px;
+        padding: 6px 9px;
+    }
+}

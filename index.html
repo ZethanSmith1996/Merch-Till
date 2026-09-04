@@ -91,6 +91,20 @@
             </span>
         </div>
 
+        <div
+            id="global-cloud-status-pill"
+            class="global-cloud-status-pill cloud-checking"
+            role="status"
+            aria-live="polite"
+            title="Cloud connection status"
+        >
+            <span class="global-cloud-status-dot"></span>
+
+            <span id="global-cloud-status-label">
+                Checking Cloud…
+            </span>
+        </div>
+
     </div>
 
     <div class="account-area">
@@ -377,29 +391,6 @@
                     >
                         Product management is online. Supabase is the source of truth.
                     </p>
-
-
-                    <div class="cloud-setup-card">
-
-                        <div>
-                            <h3>Cloud Setup</h3>
-                            <p>
-                                Copy this device's existing products, sessions and transactions to Supabase.
-                                The local Till database remains unchanged.
-                            </p>
-                            <p id="cloud-upload-counts" class="cloud-upload-counts"></p>
-                            <p id="cloud-upload-status" class="cloud-upload-status" aria-live="polite"></p>
-                        </div>
-
-                        <button
-                            type="button"
-                            id="upload-cloud-data-button"
-                            class="add-product-button"
-                        >
-                            Upload Existing Till Data
-                        </button>
-
-                    </div>
 <div class="products-table-container">
 
                         <table class="products-table">
@@ -1309,7 +1300,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=step6c"></script>
+<script type="module" src="js/app.js?v=priority8a"></script>
 
 </body>
 </html>
