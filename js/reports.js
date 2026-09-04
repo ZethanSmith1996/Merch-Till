@@ -531,8 +531,24 @@ export function renderReports() {
     }, 0);
 
     const hasPaymentData = activeSales.some(function (sale) {
-        return ["cash", "card", "split"].includes(
-            sale.paymentMethod
+        /*
+         * Detect payment data from the recorded monetary fields as well as
+         * paymentMethod. This is more robust across local/cloud cache versions:
+         * old pre-Priority-13 sales have both amounts at £0.00, while any
+         * genuine Cash/Card/Split transaction has at least one recorded amount.
+         */
+        const cash =
+            Number(sale.cashAmount || 0);
+
+        const card =
+            Number(sale.cardAmount || 0);
+
+        return (
+            cash > 0 ||
+            card > 0 ||
+            ["cash", "card", "split"].includes(
+                sale.paymentMethod
+            )
         );
     });
 
