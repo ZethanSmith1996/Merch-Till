@@ -17,6 +17,8 @@ let sessionAssignmentEligibleSessions = [];
 const productionReportCache = new Map();
 const productionReportFilters = new Map();
 const expandedTransactionIds = new Set();
+const expandedProductLists = new Set();
+const expandedTransactionLists = new Set();
 
 
 function setArchiveStatus(
@@ -986,6 +988,16 @@ function renderProductionReport(
             activeSales
         );
 
+    const productsExpanded =
+        expandedProductLists.has(
+            production.id
+        );
+
+    const transactionsExpanded =
+        expandedTransactionLists.has(
+            production.id
+        );
+
     const sessionOptions =
         reportData.sessions
             .map(
@@ -1149,56 +1161,94 @@ function renderProductionReport(
 
 
             <div class="archive-report-products">
-                <h4>Products Sold</h4>
 
-                ${
-                    products.length > 0
-                        ? products.map(
-                            function ([name, quantity]) {
-                                return `
-                                    <div class="archive-report-product-row">
-                                        <span>${escapeHTML(name)}</span>
-                                        <strong>${quantity}</strong>
-                                    </div>
-                                `;
-                            }
-                        ).join("")
-                        : '<p class="archive-report-empty">No products were sold in this period.</p>'
-                }
-            </div>
+                <button
+                    type="button"
+                    class="archive-report-section-toggle"
+                    data-toggle-products="${production.id}"
+                    aria-expanded="${productsExpanded}"
+                >
+                    <span>
+                        <strong>Products Sold</strong>
+                        <small>
+                            ${itemsSold} item${itemsSold === 1 ? "" : "s"}
+                        </small>
+                    </span>
 
+                    <span>
+                        ${productsExpanded ? "Hide" : "Show"}
+                    </span>
+                </button>
 
-            <div class="archive-report-transactions-heading">
-                <h4>
-                    Transactions
-                </h4>
-
-                <span>
-                    ${selectedSales.length} shown
-                </span>
-            </div>
-
-            <div class="archive-report-transactions">
-                ${
-                    selectedSales.length > 0
-                        ? selectedSales
-                            .slice()
-                            .sort(
-                                function (a, b) {
-                                    return (
-                                        String(b.createdAt || `${b.date} ${b.time}`)
-                                            .localeCompare(
-                                                String(a.createdAt || `${a.date} ${a.time}`)
-                                            )
-                                    );
+                <div
+                    class="archive-report-collapsible-content"
+                    ${productsExpanded ? "" : "hidden"}
+                >
+                    ${
+                        products.length > 0
+                            ? products.map(
+                                function ([name, quantity]) {
+                                    return `
+                                        <div class="archive-report-product-row">
+                                            <span>${escapeHTML(name)}</span>
+                                            <strong>${quantity}</strong>
+                                        </div>
+                                    `;
                                 }
-                            )
-                            .map(
-                                renderArchiveTransaction
-                            )
-                            .join("")
-                        : '<p class="archive-report-empty">No transactions match this report filter.</p>'
-                }
+                            ).join("")
+                            : '<p class="archive-report-empty">No products were sold in this period.</p>'
+                    }
+                </div>
+
+            </div>
+
+
+            <div class="archive-report-transactions-section">
+
+                <button
+                    type="button"
+                    class="archive-report-section-toggle"
+                    data-toggle-transactions="${production.id}"
+                    aria-expanded="${transactionsExpanded}"
+                >
+                    <span>
+                        <strong>Transactions</strong>
+                        <small>
+                            ${selectedSales.length} shown
+                        </small>
+                    </span>
+
+                    <span>
+                        ${transactionsExpanded ? "Hide All Transactions" : "Show All Transactions"}
+                    </span>
+                </button>
+
+                <div
+                    class="archive-report-transactions"
+                    ${transactionsExpanded ? "" : "hidden"}
+                >
+                    ${
+                        selectedSales.length > 0
+                            ? selectedSales
+                                .slice()
+                                .sort(
+                                    function (a, b) {
+                                        return (
+                                            String(b.createdAt || `${b.date} ${b.time}`)
+                                                .localeCompare(
+                                                    String(a.createdAt || `${a.date} ${a.time}`)
+                                                )
+                                        );
+                                    }
+                                )
+                                .map(
+                                    renderArchiveTransaction
+                                )
+                                .join("")
+                            : '<p class="archive-report-empty">No transactions match this report filter.</p>'
+                    }
+                </div>
+
             </div>
 
         </div>
@@ -1310,6 +1360,63 @@ function bindProductionReportControls(
             );
         }
     );
+
+    const productsToggle =
+        document.querySelector(
+            `[data-toggle-products="${production.id}"]`
+        );
+
+    productsToggle?.addEventListener(
+        "click",
+        function () {
+            if (
+                expandedProductLists.has(
+                    production.id
+                )
+            ) {
+                expandedProductLists.delete(
+                    production.id
+                );
+            } else {
+                expandedProductLists.add(
+                    production.id
+                );
+            }
+
+            renderProductionReport(
+                production
+            );
+        }
+    );
+
+    const transactionsToggle =
+        document.querySelector(
+            `[data-toggle-transactions="${production.id}"]`
+        );
+
+    transactionsToggle?.addEventListener(
+        "click",
+        function () {
+            if (
+                expandedTransactionLists.has(
+                    production.id
+                )
+            ) {
+                expandedTransactionLists.delete(
+                    production.id
+                );
+            } else {
+                expandedTransactionLists.add(
+                    production.id
+                );
+            }
+
+            renderProductionReport(
+                production
+            );
+        }
+    );
+
 
     document
         .querySelectorAll(

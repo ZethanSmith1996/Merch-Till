@@ -3226,3 +3226,60 @@ select:focus {
         grid-row: 1 / 4;
     }
 }
+
+
+/* ==================================================
+   Priority 14D.1 — Collapsible Products/Transactions
+================================================== */
+
+.archive-report-section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+    padding: 13px 15px;
+    border: 0;
+    background: var(--grey-100);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.archive-report-section-toggle:hover {
+    background: var(--grey-200);
+}
+
+.archive-report-section-toggle > span:first-child strong,
+.archive-report-section-toggle > span:first-child small {
+    display: block;
+}
+
+.archive-report-section-toggle > span:first-child small {
+    margin-top: 2px;
+    color: var(--grey-600);
+    font-weight: 600;
+}
+
+.archive-report-section-toggle > span:last-child {
+    color: var(--blue-700);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.archive-report-collapsible-content[hidden],
+.archive-report-transactions[hidden] {
+    display: none;
+}
+
+.archive-report-transactions-section {
+    margin-top: 20px;
+    overflow: hidden;
+    border: 1px solid var(--grey-300);
+    border-radius: 10px;
+    background: var(--white);
+}
+
+.archive-report-transactions-section .archive-report-transactions {
+    padding: 10px;
+}
