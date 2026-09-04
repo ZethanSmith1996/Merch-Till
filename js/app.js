@@ -33,7 +33,7 @@ import {
     renderUsersTable
 } from "./users.js?v=priority10c";
 import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority10c";
-import { initialiseAuditLog } from "./audit-log.js?v=priority10c";
+import { initialiseAuditLog } from "./audit-log.js?v=priority10c1";
 
 function refreshProductDisplays() {
     renderTillProducts();

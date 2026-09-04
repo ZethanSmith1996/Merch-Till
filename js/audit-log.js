@@ -2,25 +2,18 @@ import { dom } from "./dom.js";
 import { supabaseConfig } from "./config.js";
 import { getValidCloudAccessToken } from "./auth.js?v=priority10b";
 import { escapeHTML } from "./utils.js";
+import { canViewReports } from "./permissions.js";
 
 let auditEvents = [];
 let auditUsers = [];
 
-function currentRole() {
-    return (
-        sessionStorage.getItem(
-            "merchTillRole"
-        ) || ""
-    );
-}
-
 function canViewAuditLog() {
-    return [
-        "admin",
-        "master-admin"
-    ].includes(
-        currentRole()
-    );
+    /*
+     * Audit Log access follows the Till's existing Admin permission model
+     * rather than a hard-coded username/role list. Any account that has the
+     * normal Admin permission to view Reports can also view Audit Log.
+     */
+    return canViewReports();
 }
 
 function setAuditStatus(
