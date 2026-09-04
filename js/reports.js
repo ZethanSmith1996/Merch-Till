@@ -422,6 +422,24 @@ function renderTransactions(sales) {
                 Completed by: <strong>${escapeHTML(sale.completedBy || "Unknown")}</strong>
             </p>
 
+            ${sale.paymentMethod
+                ? `<p class="transaction-payment">
+                    Payment:
+                    <strong>${
+                        sale.paymentMethod === "split"
+                            ? `${currencyFormatter.format(Number(sale.cashAmount) || 0)} Cash + ${currencyFormatter.format(Number(sale.cardAmount) || 0)} Card`
+                            : sale.paymentMethod === "cash"
+                                ? "Cash"
+                                : "Card"
+                    }</strong>
+                    ${
+                        Number(sale.changeDue || 0) > 0
+                            ? ` · Change ${currencyFormatter.format(Number(sale.changeDue) || 0)}`
+                            : ""
+                    }
+                   </p>`
+                : ""}
+
             ${sale.voided
                 ? `<p class="transaction-void-notice">
                     <strong>VOIDED</strong>

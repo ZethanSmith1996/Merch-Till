@@ -18,7 +18,7 @@ import {
     renderCart,
     renderTillProducts,
     refreshTillAvailability
-} from "./till.js?v=step6c";
+} from "./till.js?v=priority13a";
 import {
     initialiseSessions,
     renderSessionStatus,
@@ -27,12 +27,12 @@ import {
 import {
     initialiseReports,
     renderReports
-} from "./reports.js?v=priority10c";
+} from "./reports.js?v=priority13a";
 import {
     initialiseUserManagement,
     renderUsersTable
 } from "./users.js?v=priority10c";
-import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority10c";
+import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority13a";
 import { initialiseAuditLog } from "./audit-log.js?v=priority10c1";
 import { initialiseOptions, refreshOptionsFromCloud } from "./options.js?v=priority11b";
 

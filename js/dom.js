@@ -36,6 +36,21 @@ export const dom = {
 
     trainingModeBanner: document.getElementById("training-mode-banner"),
 
+    paymentModal: document.getElementById("payment-modal"),
+    paymentTotal: document.getElementById("payment-total"),
+    paymentPaid: document.getElementById("payment-paid"),
+    paymentRemaining: document.getElementById("payment-remaining"),
+    paymentLines: document.getElementById("payment-lines"),
+    paymentAmount: document.getElementById("payment-amount"),
+    paymentError: document.getElementById("payment-error"),
+    paymentCashButton: document.getElementById("payment-cash-button"),
+    paymentCardButton: document.getElementById("payment-card-button"),
+    resetPaymentButton: document.getElementById("reset-payment-button"),
+    cancelPaymentButton: document.getElementById("cancel-payment-button"),
+    closePaymentModalButton: document.getElementById("close-payment-modal"),
+    paymentChangeBox: document.getElementById("payment-change-box"),
+    paymentChangeDue: document.getElementById("payment-change-due"),
+
     discountModal: document.getElementById("discount-modal"),
     discountForm: document.getElementById("discount-form"),
     discountPercentInput: document.getElementById("discount-percent"),

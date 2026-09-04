@@ -96,6 +96,20 @@ function unmapSale(row) {
         total: Number(row.total) || 0,
         itemCount: Number(row.item_count) || 0,
         items: Array.isArray(row.items) ? row.items : [],
+        paymentMethod:
+            row.payment_method || null,
+        cashAmount:
+            Number(row.cash_amount) || 0,
+        cardAmount:
+            Number(row.card_amount) || 0,
+        cashTendered:
+            Number(row.cash_tendered) || 0,
+        changeDue:
+            Number(row.change_due) || 0,
+        payments:
+            Array.isArray(row.payments)
+                ? row.payments
+                : [],
         voided: Boolean(row.voided),
         voidedAt: row.voided_at || null,
         voidedBy: row.voided_by || null
@@ -151,6 +165,20 @@ function mapSale(sale) {
         total: Number(sale.total) || 0,
         item_count: Number(sale.itemCount) || 0,
         items: Array.isArray(sale.items) ? sale.items : [],
+        payment_method:
+            sale.paymentMethod || null,
+        cash_amount:
+            Number(sale.cashAmount) || 0,
+        card_amount:
+            Number(sale.cardAmount) || 0,
+        cash_tendered:
+            Number(sale.cashTendered) || 0,
+        change_due:
+            Number(sale.changeDue) || 0,
+        payments:
+            Array.isArray(sale.payments)
+                ? sale.payments
+                : [],
         voided: Boolean(sale.voided),
         voided_at: sale.voidedAt || null,
         voided_by: sale.voidedBy || null,

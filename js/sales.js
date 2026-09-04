@@ -8,7 +8,14 @@ function getLocalDateParts(date) {
     return `${year}-${month}-${day}`;
 }
 
-export function createSaleRecord({ subtotal, discountPercent, discountAmount, total, discountAuthorizedBy }) {
+export function createSaleRecord({
+    subtotal,
+    discountPercent,
+    discountAmount,
+    total,
+    discountAuthorizedBy,
+    payment = null
+}) {
     const now = new Date();
 
     const items = Array.from(state.cart.values()).map(function (item) {
@@ -48,6 +55,20 @@ export function createSaleRecord({ subtotal, discountPercent, discountAmount, to
         discountAuthorizedBy: discountAuthorizedBy || null,
         total: total,
         itemCount: itemCount,
-        items: items
+        items: items,
+        paymentMethod:
+            payment?.paymentMethod || null,
+        cashAmount:
+            Number(payment?.cashAmount) || 0,
+        cardAmount:
+            Number(payment?.cardAmount) || 0,
+        cashTendered:
+            Number(payment?.cashTendered) || 0,
+        changeDue:
+            Number(payment?.changeDue) || 0,
+        payments:
+            Array.isArray(payment?.payments)
+                ? payment.payments
+                : []
     };
 }

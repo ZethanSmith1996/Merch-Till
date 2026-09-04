@@ -15,6 +15,8 @@ import {
 
 import { createSaleRecord } from "./sales.js";
 import { isTrainingUser } from "./permissions.js";
+import { isPaymentTypesEnabled } from "./options.js?v=priority11b";
+import { collectPayment, initialisePayments } from "./payments.js?v=priority13a";
 import {
     attemptImmediateAtomicSale,
     refreshLocalCacheFromCloud
@@ -598,7 +600,7 @@ function createUniqueSaleId() {
 }
 
 
-async function completeSale() {
+async function completeSale(payment = null) {
     const trainingMode = isTrainingUser();
 
     if (!state.currentSession && !trainingMode) {
@@ -622,6 +624,16 @@ async function completeSale() {
             (totals.discountAmount > 0
                 ? `Discount: -${currencyFormatter.format(totals.discountAmount)}\n\n`
                 : "\n") +
+            (
+                payment
+                    ? `Payment: ${payment.paymentMethod === "split" ? "Split" : payment.paymentMethod === "cash" ? "Cash" : "Card"}\n`
+                    : ""
+            ) +
+            (
+                payment?.changeDue > 0
+                    ? `Change: ${currencyFormatter.format(payment.changeDue)}\n`
+                    : ""
+            ) +
             "No stock has been changed.\n" +
             "No transaction has been recorded."
         );
@@ -638,7 +650,8 @@ async function completeSale() {
         ...createSaleRecord({
             ...totals,
             discountAuthorizedBy:
-                state.currentDiscountAuthorizedBy
+                state.currentDiscountAuthorizedBy,
+            payment
         }),
         id: createUniqueSaleId()
     };
@@ -766,7 +779,23 @@ async function completeSale() {
                 ? `Subtotal: ${currencyFormatter.format(totals.subtotal)}\n` +
                   `Discount (${totals.discountPercent}%): -${currencyFormatter.format(totals.discountAmount)}\n`
                 : "") +
-            `Total: ${currencyFormatter.format(saleTotal)}`
+            `Total: ${currencyFormatter.format(saleTotal)}` +
+            (
+                payment
+                    ? `\nPayment: ${
+                        payment.paymentMethod === "split"
+                            ? `Split (${currencyFormatter.format(payment.cashAmount)} Cash + ${currencyFormatter.format(payment.cardAmount)} Card)`
+                            : payment.paymentMethod === "cash"
+                                ? "Cash"
+                                : "Card"
+                    }`
+                    : ""
+            ) +
+            (
+                payment?.changeDue > 0
+                    ? `\nChange Due: ${currencyFormatter.format(payment.changeDue)}`
+                    : ""
+            )
         );
 
         if (
@@ -833,6 +862,38 @@ async function completeSale() {
     }
 }
 
+async function beginCompleteSale() {
+    if (state.cart.size === 0) {
+        return;
+    }
+
+    if (!isPaymentTypesEnabled()) {
+        await completeSale(null);
+        return;
+    }
+
+    const totals =
+        calculateOrderTotals();
+
+    const payment =
+        await collectPayment(
+            totals.total
+        );
+
+    /*
+     * Cancel simply returns to the order. Nothing has been recorded and the
+     * basket remains exactly as it was.
+     */
+    if (!payment) {
+        return;
+    }
+
+    await completeSale(
+        payment
+    );
+}
+
+
 /* ==================================================
    Initialise Till
 ================================================== */
@@ -860,7 +921,9 @@ export function initialiseTill() {
         }
     });
 
-    dom.completeSaleButton.addEventListener("click", completeSale);
+    initialisePayments();
+
+    dom.completeSaleButton.addEventListener("click", beginCompleteSale);
 
     dom.closeVariantModalButton.addEventListener("click", closeVariantSelector);
     dom.cancelVariantButton.addEventListener("click", closeVariantSelector);
