@@ -1,5 +1,6 @@
 export const ROLE_MASTER_ADMIN = "master-admin";
 export const ROLE_ADMIN = "admin";
+export const ROLE_MANAGER = "manager";
 export const ROLE_STAFF = "staff";
 export const ROLE_TRAINING = "training";
 
@@ -19,6 +20,11 @@ export function isAdmin() {
 }
 
 
+export function isManager() {
+    return getCurrentUserRole() === ROLE_MANAGER;
+}
+
+
 export function isStaff() {
     return getCurrentUserRole() === ROLE_STAFF;
 }
@@ -34,6 +40,7 @@ export function canManageSessions() {
 
     return (
         role === ROLE_MASTER_ADMIN ||
+        role === ROLE_MANAGER ||
         role === ROLE_ADMIN
     );
 }
@@ -56,6 +63,16 @@ export function canManageUsers() {
 
 export function canManageOptions() {
     return canManageSessions();
+}
+
+
+export function canManageProductions() {
+    const role = getCurrentUserRole();
+
+    return (
+        role === ROLE_MASTER_ADMIN ||
+        role === ROLE_MANAGER
+    );
 }
 
 

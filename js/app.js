@@ -31,7 +31,7 @@ import {
 import {
     initialiseUserManagement,
     renderUsersTable
-} from "./users.js?v=priority10c";
+} from "./users.js?v=priority14a";
 import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority13a";
 import { initialiseAuditLog } from "./audit-log.js?v=priority10c1";
 import { initialiseOptions, refreshOptionsFromCloud } from "./options.js?v=priority11b";

@@ -10,6 +10,7 @@ const MANAGE_USERS_URL =
 const roleLabels = {
     "master-admin": "Master Admin",
     admin: "Admin",
+    manager: "Manager",
     staff: "Staff",
     training: "Training"
 };
@@ -55,6 +56,9 @@ function renderCloudUsers() {
                     </option>
                     <option value="admin" ${user.role === "admin" ? "selected" : ""}>
                         Admin
+                    </option>
+                    <option value="manager" ${user.role === "manager" ? "selected" : ""}>
+                        Manager
                     </option>
                 </select>
             `;
@@ -322,9 +326,9 @@ async function submitCloudUser(event) {
         return;
     }
 
-    if (!["staff", "admin"].includes(role)) {
+    if (!["staff", "admin", "manager"].includes(role)) {
         dom.userFormError.textContent =
-            "Choose Staff or Admin.";
+            "Choose Staff, Admin or Manager.";
         return;
     }
 
