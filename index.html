@@ -167,6 +167,15 @@
                 <button
                     type="button"
                     class="nav-button"
+                    data-screen="options-section"
+                    id="options-nav-button"
+                >
+                    Options
+                </button>
+
+                <button
+                    type="button"
+                    class="nav-button"
                     data-screen="users-section"
                 >
                     Users
@@ -847,6 +856,107 @@
                 </section>
 
 
+                <!-- ==================================================
+                     Options section
+                ================================================== -->
+                <section
+                    id="options-section"
+                    class="app-section"
+                    hidden
+                >
+
+                    <div class="section-heading">
+
+                        <div>
+                            <h2>Options</h2>
+
+                            <p>
+                                Turn optional Till features on or off without changing the everyday sales workflow.
+                            </p>
+                        </div>
+
+                    </div>
+
+
+                    <div class="options-panel">
+
+                        <div class="options-group-heading">
+
+                            <div>
+                                <h3>Checkout</h3>
+
+                                <p>
+                                    Settings that control optional steps during a sale.
+                                </p>
+                            </div>
+
+                            <span class="options-scope-badge">
+                                Global
+                            </span>
+
+                        </div>
+
+
+                        <div class="option-row">
+
+                            <div class="option-copy">
+
+                                <label
+                                    for="payment-types-option"
+                                    class="option-title"
+                                >
+                                    Payment Types
+                                </label>
+
+                                <p>
+                                    When enabled, checkout can support Cash, Card and Split payments.
+                                    The current fast Complete Sale flow remains unchanged until the
+                                    payment feature itself is added in Priority 13.
+                                </p>
+
+                            </div>
+
+
+                            <label
+                                class="option-switch"
+                                aria-label="Payment Types"
+                            >
+                                <input
+                                    type="checkbox"
+                                    id="payment-types-option"
+                                >
+
+                                <span
+                                    class="option-switch-track"
+                                    aria-hidden="true"
+                                >
+                                    <span class="option-switch-thumb"></span>
+                                </span>
+
+                                <span
+                                    id="payment-types-option-label"
+                                    class="option-switch-label"
+                                >
+                                    Off
+                                </span>
+                            </label>
+
+                        </div>
+
+                    </div>
+
+
+                    <p
+                        id="options-status"
+                        class="options-status"
+                        aria-live="polite"
+                    >
+                        Open Options while online to load the latest settings.
+                    </p>
+
+                </section>
+
+
                 <section
                     id="users-section"
                     class="app-section"
@@ -1504,7 +1614,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=priority10c1"></script>
+<script type="module" src="js/app.js?v=priority11b"></script>
 
 </body>
 </html>
