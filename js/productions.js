@@ -291,6 +291,15 @@ export function initialiseProductions() {
         }
     );
 
+    document.addEventListener(
+        "production-data-changed",
+        function () {
+            refreshCurrentProduction({
+                silent: true
+            });
+        }
+    );
+
     window.addEventListener(
         "pagehide",
         stopLifecycleTimer

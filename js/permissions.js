@@ -66,6 +66,14 @@ export function canManageOptions() {
 }
 
 
+export function canManageArchive() {
+    return [
+        "manager",
+        "master-admin"
+    ].includes(currentRole());
+}
+
+
 export function canManageProductions() {
     const role = getCurrentUserRole();
 
@@ -89,6 +97,9 @@ export function canAccessScreen(screenId) {
 
         case "audit-section":
             return canViewReports();
+
+        case "archive-section":
+            return canManageArchive();
 
         case "options-section":
             return canManageOptions();

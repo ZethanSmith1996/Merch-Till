@@ -51,7 +51,7 @@
         href="icons/icon-192.png"
     >
 
-    <link rel="stylesheet" href="style.css?v=priority14b">
+    <link rel="stylesheet" href="style.css?v=priority14c">
 </head>
 
 <body>
@@ -217,6 +217,15 @@
                     id="audit-nav-button"
                 >
                     Audit Log
+                </button>
+
+                <button
+                    type="button"
+                    class="nav-button"
+                    data-screen="archive-section"
+                    id="archive-nav-button"
+                >
+                    Archive
                 </button>
 
                 <button
@@ -922,6 +931,181 @@
 
 
                 <!-- ==================================================
+                     Archive section
+                ================================================== -->
+                <section
+                    id="archive-section"
+                    class="app-section"
+                    hidden
+                >
+
+                    <div class="section-heading archive-heading">
+
+                        <div>
+                            <h2>Archive</h2>
+
+                            <p>
+                                Create, manage and review Productions.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            id="add-production-button"
+                            class="add-product-button"
+                        >
+                            + New Production
+                        </button>
+
+                    </div>
+
+
+                    <div class="archive-filter-bar">
+
+                        <div class="form-group">
+                            <label for="archive-from-date">
+                                From
+                            </label>
+
+                            <input
+                                type="date"
+                                id="archive-from-date"
+                            >
+                        </div>
+
+
+                        <div class="form-group">
+                            <label for="archive-to-date">
+                                To
+                            </label>
+
+                            <input
+                                type="date"
+                                id="archive-to-date"
+                            >
+                        </div>
+
+
+                        <div class="form-group">
+                            <label for="archive-status-filter">
+                                Status
+                            </label>
+
+                            <select id="archive-status-filter">
+                                <option value="">
+                                    All Statuses
+                                </option>
+
+                                <option value="upcoming">
+                                    Upcoming
+                                </option>
+
+                                <option value="active">
+                                    Active
+                                </option>
+
+                                <option value="finished">
+                                    Finished
+                                </option>
+                            </select>
+                        </div>
+
+
+                        <div class="form-group archive-search-group">
+                            <label for="archive-search">
+                                Search
+                            </label>
+
+                            <input
+                                type="search"
+                                id="archive-search"
+                                placeholder="Search productions"
+                                autocomplete="off"
+                            >
+                        </div>
+
+
+                        <div class="form-group">
+                            <label>&nbsp;</label>
+
+                            <button
+                                type="button"
+                                id="archive-reset-filters"
+                            >
+                                Reset Filters
+                            </button>
+                        </div>
+
+                    </div>
+
+
+                    <div class="archive-summary-row">
+
+                        <p id="archive-production-count">
+                            Displaying 0 productions
+                        </p>
+
+                        <label class="archive-sort-control">
+
+                            <span>
+                                Sort By:
+                            </span>
+
+                            <select id="archive-sort-order">
+                                <option
+                                    value="newest"
+                                    selected
+                                >
+                                    Newest First
+                                </option>
+
+                                <option value="oldest">
+                                    Oldest First
+                                </option>
+                            </select>
+
+                        </label>
+
+                    </div>
+
+
+                    <p
+                        id="archive-status"
+                        class="cloud-upload-status"
+                        aria-live="polite"
+                    >
+                        Open Archive while online to load Productions.
+                    </p>
+
+
+                    <div
+                        id="archive-unassigned-banner"
+                        class="archive-unassigned-banner"
+                        hidden
+                    >
+                        <strong id="archive-unassigned-count">
+                            0 unassigned sessions
+                        </strong>
+
+                        <span>
+                            Unassigned sessions can be attached to a Production from its details.
+                        </span>
+                    </div>
+
+
+                    <div
+                        id="archive-production-list"
+                        class="archive-production-list"
+                    >
+                        <div class="archive-empty-message">
+                            No Productions to display.
+                        </div>
+                    </div>
+
+                </section>
+
+
+                <!-- ==================================================
                      Options section
                 ================================================== -->
                 <section
@@ -1508,6 +1692,154 @@
 
 
     <!-- ==================================================
+         Production form popup
+    ================================================== -->
+    <div
+        id="production-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box production-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="production-modal-title"
+        >
+
+            <div class="modal-header">
+
+                <h2 id="production-modal-title">
+                    New Production
+                </h2>
+
+                <button
+                    type="button"
+                    id="close-production-modal"
+                    class="modal-close-button"
+                    aria-label="Close Production form"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <form id="production-form">
+
+                <input
+                    type="hidden"
+                    id="editing-production-id"
+                >
+
+
+                <div class="form-group">
+
+                    <label for="production-name">
+                        Production Name
+                    </label>
+
+                    <input
+                        type="text"
+                        id="production-name"
+                        maxlength="120"
+                        required
+                    >
+
+                </div>
+
+
+                <div class="production-date-grid">
+
+                    <div class="form-group">
+
+                        <label for="production-start-date">
+                            Start Date
+                        </label>
+
+                        <input
+                            type="date"
+                            id="production-start-date"
+                            required
+                        >
+
+                    </div>
+
+
+                    <div class="form-group">
+
+                        <label for="production-close-date">
+                            Auto-close Date
+                        </label>
+
+                        <input
+                            type="date"
+                            id="production-close-date"
+                            required
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label for="production-description">
+                        Description
+                        <span class="optional-label">
+                            Optional
+                        </span>
+                    </label>
+
+                    <textarea
+                        id="production-description"
+                        rows="4"
+                        maxlength="1000"
+                    ></textarea>
+
+                </div>
+
+
+                <p class="field-help">
+                    Auto-close Date is exclusive. For a Production selling through Saturday, choose Sunday.
+                </p>
+
+
+                <p
+                    id="production-form-error"
+                    class="form-error"
+                    aria-live="polite"
+                ></p>
+
+
+                <div class="modal-actions">
+
+                    <button
+                        type="button"
+                        id="cancel-production-button"
+                        class="secondary-button"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="save-product-button"
+                    >
+                        Save Production
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
          Discount authorisation popup
     ================================================== -->
     <div
@@ -1839,7 +2171,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=priority14b"></script>
+<script type="module" src="js/app.js?v=priority14c"></script>
 
 </body>
 </html>
