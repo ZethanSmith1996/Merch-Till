@@ -103,6 +103,12 @@ export const dom = {
     auditStatus: document.getElementById("audit-status"),
     auditLogRows: document.getElementById("audit-log-rows"),
 
+    optionsNavButton: document.getElementById("options-nav-button"),
+    optionsSection: document.getElementById("options-section"),
+    paymentTypesOption: document.getElementById("payment-types-option"),
+    paymentTypesOptionLabel: document.getElementById("payment-types-option-label"),
+    optionsStatus: document.getElementById("options-status"),
+
     todayReportButton: document.getElementById("today-report-button"),
     reportStartDate: document.getElementById("report-start-date"),
     reportEndDate: document.getElementById("report-end-date"),

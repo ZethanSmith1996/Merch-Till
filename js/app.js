@@ -34,6 +34,7 @@ import {
 } from "./users.js?v=priority10c";
 import { initialiseCloudSync, flushPendingCloudSync, refreshLocalCacheFromCloud } from "./cloud-sync.js?v=priority10c";
 import { initialiseAuditLog } from "./audit-log.js?v=priority10c1";
+import { initialiseOptions, refreshOptionsFromCloud } from "./options.js?v=priority11b";
 
 function refreshProductDisplays() {
     renderTillProducts();
@@ -56,6 +57,7 @@ async function startApplication() {
     initialiseReports();
     initialiseUserManagement();
     initialiseAuditLog();
+    initialiseOptions();
     initialiseCloudSync();
 
     document.addEventListener("products-changed", refreshProductDisplays);
@@ -89,6 +91,9 @@ async function startApplication() {
 
         if (isCloudUsername(signedInUsername)) {
             await refreshLocalCacheFromCloud();
+            await refreshOptionsFromCloud({
+                silent: true
+            });
         } else {
             await flushPendingCloudSync();
         }

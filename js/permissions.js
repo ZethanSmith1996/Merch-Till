@@ -54,6 +54,11 @@ export function canManageUsers() {
 }
 
 
+export function canManageOptions() {
+    return canManageSessions();
+}
+
+
 export function canAccessScreen(screenId) {
     switch (screenId) {
         case "till-section":
@@ -67,6 +72,9 @@ export function canAccessScreen(screenId) {
 
         case "audit-section":
             return canViewReports();
+
+        case "options-section":
+            return canManageOptions();
 
         case "users-section":
             return canManageUsers();
