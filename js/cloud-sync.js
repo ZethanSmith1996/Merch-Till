@@ -18,6 +18,7 @@ const CLOUD_QUEUE_BASE_BACKOFF_MS = 5000;
 const CLOUD_QUEUE_MAX_BACKOFF_MS = 5 * 60 * 1000;
 let syncTimer = null;
 let syncInProgress = false;
+let lastGlobalSyncError = null;
 let sharedProductRefreshInProgress = false;
 
 function compareProducts(first, second) {
@@ -1167,13 +1168,138 @@ function markDirty(changes) {
     scheduleCloudSync();
 }
 
-function updateCloudUploadStatus(message, isError = false) {
-    if (!dom.cloudUploadStatus) {
+
+function setGlobalCloudIndicator(
+    label,
+    stateClass,
+    title = ""
+) {
+    if (
+        !dom.globalCloudStatusPill ||
+        !dom.globalCloudStatusLabel
+    ) {
         return;
     }
 
-    dom.cloudUploadStatus.textContent = message;
-    dom.cloudUploadStatus.classList.toggle("cloud-upload-error", isError);
+    dom.globalCloudStatusPill.className =
+        `global-cloud-status-pill ${stateClass}`;
+
+    dom.globalCloudStatusLabel.textContent =
+        label;
+
+    dom.globalCloudStatusPill.title =
+        title || label;
+}
+
+function updateGlobalCloudIndicator() {
+    const role =
+        sessionStorage.getItem(
+            "merchTillRole"
+        ) || "";
+
+    if (role === "training") {
+        setGlobalCloudIndicator(
+            "LOCAL TRAINING",
+            "cloud-local",
+            "Training mode is local only and does not sync to Supabase."
+        );
+        return;
+    }
+
+    const queueSummary =
+        queueStatusSummary();
+
+    const dirty =
+        readDirtyState();
+
+    const hasOtherPendingWork =
+        dirty.products ||
+        dirty.sessions ||
+        dirty.sales;
+
+    const waitingCount =
+        queueSummary.count;
+
+    if (!navigator.onLine) {
+        setGlobalCloudIndicator(
+            waitingCount > 0
+                ? `OFFLINE — ${waitingCount} WAITING`
+                : "OFFLINE",
+            "cloud-offline",
+            waitingCount > 0
+                ? `${waitingCount} operation${waitingCount === 1 ? "" : "s"} safely stored on this device and waiting for internet.`
+                : "This device is offline. Cached Till data remains available."
+        );
+        return;
+    }
+
+    if (
+        lastGlobalSyncError ||
+        queueSummary.lastError
+    ) {
+        setGlobalCloudIndicator(
+            waitingCount > 0
+                ? `SYNC ERROR — ${waitingCount} WAITING`
+                : "SYNC ERROR",
+            "cloud-error",
+            lastGlobalSyncError ||
+                queueSummary.lastError ||
+                "Cloud sync encountered an error."
+        );
+        return;
+    }
+
+    if (
+        syncInProgress ||
+        waitingCount > 0 ||
+        hasOtherPendingWork
+    ) {
+        setGlobalCloudIndicator(
+            waitingCount > 0
+                ? `SYNCING — ${waitingCount} WAITING`
+                : "SYNCING",
+            "cloud-syncing",
+            waitingCount > 0
+                ? `${waitingCount} operation${waitingCount === 1 ? "" : "s"} waiting for Supabase confirmation.`
+                : "Cloud changes are being synchronised."
+        );
+        return;
+    }
+
+    setGlobalCloudIndicator(
+        "CLOUD SYNCED",
+        "cloud-synced",
+        "This Till is online with no pending cloud operations."
+    );
+}
+
+
+function updateCloudUploadStatus(message, isError = false) {
+    if (isError) {
+        lastGlobalSyncError =
+            message || "Cloud sync error";
+    } else if (
+        message &&
+        (
+            message.includes("synced") ||
+            message.includes("loaded") ||
+            message.includes("complete")
+        )
+    ) {
+        lastGlobalSyncError = null;
+    }
+
+    if (dom.cloudUploadStatus) {
+        dom.cloudUploadStatus.textContent =
+            message;
+
+        dom.cloudUploadStatus.classList.toggle(
+            "cloud-upload-error",
+            isError
+        );
+    }
+
+    updateGlobalCloudIndicator();
 }
 
 function updateCloudUploadCounts() {
@@ -1201,6 +1327,8 @@ function updateCloudUploadCounts() {
         `${state.sessions.length} sessions · ` +
         `${state.sales.length} transactions in this device's local database` +
         queueText;
+
+    updateGlobalCloudIndicator();
 }
 
 function scheduleCloudSync() {
@@ -1235,6 +1363,8 @@ export async function flushPendingCloudSync() {
     }
 
     syncInProgress = true;
+    lastGlobalSyncError = null;
+    updateGlobalCloudIndicator();
     updateCloudUploadStatus("Automatic cloud sync in progress…");
 
     try {
@@ -1337,6 +1467,7 @@ export async function flushPendingCloudSync() {
         return false;
     } finally {
         syncInProgress = false;
+        updateGlobalCloudIndicator();
     }
 }
 
@@ -1426,6 +1557,7 @@ async function uploadExistingTillData() {
 export function initialiseCloudSync() {
     migrateLegacyPendingSalesQueue();
     updateCloudUploadCounts();
+    updateGlobalCloudIndicator();
 
     /*
      * If the browser/app was closed with pending work, the localStorage queue

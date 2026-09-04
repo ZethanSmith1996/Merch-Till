@@ -3,6 +3,8 @@ export const dom = {
     appScreen: document.getElementById("app-screen"),
     tradingStatusPill: document.getElementById("trading-status-pill"),
     tradingStatusLabel: document.getElementById("trading-status-label"),
+    globalCloudStatusPill: document.getElementById("global-cloud-status-pill"),
+    globalCloudStatusLabel: document.getElementById("global-cloud-status-label"),
     sessionControlBar: document.getElementById("session-control-bar"),
     loginForm: document.getElementById("login-form"),
     errorMessage: document.getElementById("login-error"),
