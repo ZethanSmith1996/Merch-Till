@@ -1616,11 +1616,18 @@ function renderProductionList(rows) {
                     ${escapeHTML(production.name)}
                 </span>
 
-                <span class="archive-production-dates">
-                    ${escapeHTML(displayDate(production.startDate))}
-                    –
-                    ${escapeHTML(closeDateDisplay(production))}
-                </span>
+                                        <span class="archive-production-dates">
+                            ${displayDate(production.startDate)}
+                            —
+                            ${displayDate(
+                                new Date(
+                                    new Date(
+                                        `${production.autoCloseDate}T12:00:00`
+                                    ).getTime() -
+                                    86400000
+                                )
+                            )}
+                        </span>
 
                 <span class="archive-status-badge ${escapeHTML(production.status)}">
                     ${escapeHTML(statusLabel(production.status))}
