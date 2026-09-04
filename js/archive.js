@@ -11,6 +11,9 @@ let unassignedSessions = [];
 let expandedProductionId = null;
 let archiveRefreshTimer = null;
 
+let sessionAssignmentProduction = null;
+let sessionAssignmentEligibleSessions = [];
+
 
 function setArchiveStatus(
     message,
@@ -157,6 +160,61 @@ function closeDateDisplay(production) {
             day: "2-digit",
             month: "short",
             year: "numeric"
+        }
+    ).format(date);
+}
+
+
+function sessionDate(session) {
+    return localDateValue(
+        session.opened_at
+    );
+}
+
+
+function eligibleUnassignedSessions(
+    production
+) {
+    return unassignedSessions.filter(
+        function (session) {
+            const date =
+                sessionDate(
+                    session
+                );
+
+            return (
+                date >=
+                    production.startDate &&
+                date <
+                    production.autoCloseDate
+            );
+        }
+    );
+}
+
+
+function sessionTime(value) {
+    if (!value) {
+        return "—";
+    }
+
+    const date =
+        new Date(value);
+
+    if (
+        Number.isNaN(
+            date.getTime()
+        )
+    ) {
+        return "—";
+    }
+
+    return new Intl.DateTimeFormat(
+        "en-GB",
+        {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
         }
     ).format(date);
 }
@@ -642,16 +700,19 @@ function renderProductionActions(
         );
     }
 
+    const eligibleSessions =
+        eligibleUnassignedSessions(
+            production
+        );
+
     if (
-        production.status !==
-            "finished" &&
-        unassignedSessions.length > 0
+        eligibleSessions.length > 0
     ) {
         container.appendChild(
             actionButton(
-                `Assign Unassigned Sessions (${unassignedSessions.length})`,
+                `Assign Sessions (${eligibleSessions.length})`,
                 function () {
-                    assignUnassignedSessions(
+                    openSessionAssignmentModal(
                         production
                     );
                 }
@@ -1012,49 +1073,275 @@ async function deleteProduction(
 }
 
 
-async function assignUnassignedSessions(
+function openSessionAssignmentModal(
     production
 ) {
     if (
-        unassignedSessions.length === 0
+        !dom.sessionAssignmentModal
     ) {
         return;
     }
 
-    const firstDate =
-        unassignedSessions
-            .map(function (session) {
-                return localDateValue(
-                    session.opened_at
-                );
-            })
-            .sort()[0];
+    sessionAssignmentProduction =
+        production;
 
-    const lastDate =
-        unassignedSessions
-            .map(function (session) {
-                return localDateValue(
-                    session.opened_at
+    sessionAssignmentEligibleSessions =
+        eligibleUnassignedSessions(
+            production
+        );
+
+    dom.sessionAssignmentModalTitle.textContent =
+        "Assign Sessions";
+
+    dom.sessionAssignmentProductionLabel.textContent =
+        `${production.name} · ${displayDate(production.startDate)} – ${closeDateDisplay(production)}`;
+
+    dom.sessionAssignmentError.textContent =
+        "";
+
+    dom.sessionAssignmentSelectAll.checked =
+        false;
+
+    renderSessionAssignmentList();
+
+    dom.sessionAssignmentModal.hidden =
+        false;
+}
+
+
+function closeSessionAssignmentModal() {
+    if (
+        !dom.sessionAssignmentModal
+    ) {
+        return;
+    }
+
+    dom.sessionAssignmentModal.hidden =
+        true;
+
+    sessionAssignmentProduction =
+        null;
+
+    sessionAssignmentEligibleSessions =
+        [];
+
+    if (
+        dom.sessionAssignmentError
+    ) {
+        dom.sessionAssignmentError
+            .textContent = "";
+    }
+}
+
+
+function selectedSessionIds() {
+    if (
+        !dom.sessionAssignmentList
+    ) {
+        return [];
+    }
+
+    return Array.from(
+        dom.sessionAssignmentList
+            .querySelectorAll(
+                'input[data-session-id]:checked'
+            )
+    ).map(
+        function (input) {
+            return Number(
+                input.dataset.sessionId
+            );
+        }
+    );
+}
+
+
+function updateAssignmentSelectionState() {
+    const selected =
+        selectedSessionIds();
+
+    const total =
+        sessionAssignmentEligibleSessions
+            .length;
+
+    if (
+        dom.sessionAssignmentSelectedCount
+    ) {
+        dom.sessionAssignmentSelectedCount
+            .textContent =
+            `${selected.length} selected`;
+    }
+
+    if (
+        dom.assignSelectedSessionsButton
+    ) {
+        dom.assignSelectedSessionsButton
+            .disabled =
+            selected.length === 0;
+    }
+
+    if (
+        dom.sessionAssignmentSelectAll
+    ) {
+        dom.sessionAssignmentSelectAll
+            .checked =
+            total > 0 &&
+            selected.length === total;
+
+        dom.sessionAssignmentSelectAll
+            .indeterminate =
+            selected.length > 0 &&
+            selected.length < total;
+    }
+}
+
+
+function renderSessionAssignmentList() {
+    if (
+        !dom.sessionAssignmentList
+    ) {
+        return;
+    }
+
+    if (
+        sessionAssignmentEligibleSessions
+            .length === 0
+    ) {
+        dom.sessionAssignmentList
+            .innerHTML =
+            '<div class="archive-empty-message">No unassigned sessions fall within this Production’s dates.</div>';
+
+        updateAssignmentSelectionState();
+
+        return;
+    }
+
+    dom.sessionAssignmentList
+        .innerHTML =
+        sessionAssignmentEligibleSessions
+            .map(
+                function (session) {
+                    return `
+                        <label class="session-assignment-row">
+
+                            <input
+                                type="checkbox"
+                                data-session-id="${Number(session.id)}"
+                            >
+
+                            <span class="session-assignment-date">
+                                <strong>
+                                    ${escapeHTML(displayDate(session.opened_at))}
+                                </strong>
+
+                                <small>
+                                    Opened ${escapeHTML(sessionTime(session.opened_at))}
+                                </small>
+                            </span>
+
+                            <span class="session-assignment-value">
+                                <strong>
+                                    ${currencyFormatter.format(Number(session.money_taken) || 0)}
+                                </strong>
+
+                                <small>
+                                    Money Taken
+                                </small>
+                            </span>
+
+                            <span class="session-assignment-value">
+                                <strong>
+                                    ${Number(session.products_sold) || 0}
+                                </strong>
+
+                                <small>
+                                    Products Sold
+                                </small>
+                            </span>
+
+                            <span class="session-status-badge ${escapeHTML(session.status || "")}">
+                                ${escapeHTML(session.status || "Unknown")}
+                            </span>
+
+                        </label>
+                    `;
+                }
+            )
+            .join("");
+
+    dom.sessionAssignmentList
+        .querySelectorAll(
+            'input[data-session-id]'
+        )
+        .forEach(
+            function (input) {
+                input.addEventListener(
+                    "change",
+                    updateAssignmentSelectionState
                 );
-            })
-            .sort()
-            .at(-1);
+            }
+        );
+
+    updateAssignmentSelectionState();
+}
+
+
+function toggleSelectAllSessions() {
+    const shouldSelect =
+        Boolean(
+            dom.sessionAssignmentSelectAll
+                ?.checked
+        );
+
+    dom.sessionAssignmentList
+        ?.querySelectorAll(
+            'input[data-session-id]'
+        )
+        .forEach(
+            function (input) {
+                input.checked =
+                    shouldSelect;
+            }
+        );
+
+    updateAssignmentSelectionState();
+}
+
+
+async function assignSelectedSessions() {
+    const production =
+        sessionAssignmentProduction;
+
+    const sessionIds =
+        selectedSessionIds();
+
+    if (
+        !production ||
+        sessionIds.length === 0
+    ) {
+        return;
+    }
 
     const confirmed =
         window.confirm(
-            `Assign ${unassignedSessions.length} unassigned session${unassignedSessions.length === 1 ? "" : "s"} to "${production.name}"?\n\n` +
-            `Session dates: ${displayDate(firstDate)} – ${displayDate(lastDate)}\n\n` +
-            "All sales from those sessions will become part of this Production."
+            `Assign ${sessionIds.length} selected session${sessionIds.length === 1 ? "" : "s"} to "${production.name}"?\n\n` +
+            "This changes only their Production association. Existing sales, payment information and totals are not recreated or altered."
         );
 
     if (!confirmed) {
         return;
     }
 
+    dom.assignSelectedSessionsButton.disabled =
+        true;
+
+    dom.sessionAssignmentError.textContent =
+        "";
+
     try {
         const response =
             await archiveRequest(
-                "rpc/assign_unassigned_sessions_to_production",
+                "rpc/assign_selected_unassigned_sessions_to_production",
                 {
                     method: "POST",
                     headers: {
@@ -1066,13 +1353,17 @@ async function assignUnassignedSessions(
                     body:
                         JSON.stringify({
                             p_production_id:
-                                production.id
+                                production.id,
+                            p_session_ids:
+                                sessionIds
                         })
                 }
             );
 
         const result =
             await response.json();
+
+        closeSessionAssignmentModal();
 
         window.alert(
             `${Number(result.sessions_assigned) || 0} session${Number(result.sessions_assigned) === 1 ? "" : "s"} assigned to "${production.name}".`
@@ -1087,14 +1378,31 @@ async function assignUnassignedSessions(
         );
 
     } catch (error) {
-        window.alert(
-            "The unassigned sessions could not be attached.\n\n" +
-            (
-                error instanceof Error
-                    ? error.message
-                    : String(error)
+        const message =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+        if (
+            message.includes(
+                "SESSION_OUTSIDE_PRODUCTION_DATES"
             )
-        );
+        ) {
+            dom.sessionAssignmentError.textContent =
+                "One or more selected sessions fall outside this Production’s dates.";
+        } else if (
+            message.includes(
+                "SESSION_ALREADY_ASSIGNED"
+            )
+        ) {
+            dom.sessionAssignmentError.textContent =
+                "One of the selected sessions has already been assigned on another device. Refresh Archive and try again.";
+        } else {
+            dom.sessionAssignmentError.textContent =
+                message;
+        }
+
+        updateAssignmentSelectionState();
     }
 }
 
@@ -1281,11 +1589,61 @@ export function initialiseArchive() {
         }
     );
 
+    dom.sessionAssignmentSelectAll
+        ?.addEventListener(
+            "change",
+            toggleSelectAllSessions
+        );
+
+    dom.assignSelectedSessionsButton
+        ?.addEventListener(
+            "click",
+            assignSelectedSessions
+        );
+
+    dom.closeSessionAssignmentModalButton
+        ?.addEventListener(
+            "click",
+            closeSessionAssignmentModal
+        );
+
+    dom.cancelSessionAssignmentButton
+        ?.addEventListener(
+            "click",
+            closeSessionAssignmentModal
+        );
+
+    dom.sessionAssignmentModal
+        ?.addEventListener(
+            "click",
+            function (event) {
+                if (
+                    event.target ===
+                    dom.sessionAssignmentModal
+                ) {
+                    closeSessionAssignmentModal();
+                }
+            }
+        );
+
     document.addEventListener(
         "keydown",
         function (event) {
             if (
-                event.key === "Escape" &&
+                event.key !== "Escape"
+            ) {
+                return;
+            }
+
+            if (
+                dom.sessionAssignmentModal &&
+                !dom.sessionAssignmentModal.hidden
+            ) {
+                closeSessionAssignmentModal();
+                return;
+            }
+
+            if (
                 dom.productionModal &&
                 !dom.productionModal.hidden
             ) {

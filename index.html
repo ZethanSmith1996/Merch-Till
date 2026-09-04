@@ -51,7 +51,7 @@
         href="icons/icon-192.png"
     >
 
-    <link rel="stylesheet" href="style.css?v=priority14c">
+    <link rel="stylesheet" href="style.css?v=priority14c3">
 </head>
 
 <body>
@@ -1692,6 +1692,112 @@
 
 
     <!-- ==================================================
+         Assign historical sessions popup
+    ================================================== -->
+    <div
+        id="session-assignment-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box session-assignment-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="session-assignment-modal-title"
+        >
+
+            <div class="modal-header">
+
+                <div>
+                    <h2 id="session-assignment-modal-title">
+                        Assign Sessions
+                    </h2>
+
+                    <p
+                        id="session-assignment-production-label"
+                        class="session-assignment-production-label"
+                    ></p>
+                </div>
+
+                <button
+                    type="button"
+                    id="close-session-assignment-modal"
+                    class="modal-close-button"
+                    aria-label="Close session assignment"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <div class="session-assignment-toolbar">
+
+                <label class="session-select-all">
+
+                    <input
+                        type="checkbox"
+                        id="session-assignment-select-all"
+                    >
+
+                    <span>
+                        Select All
+                    </span>
+
+                </label>
+
+                <span id="session-assignment-selected-count">
+                    0 selected
+                </span>
+
+            </div>
+
+
+            <div
+                id="session-assignment-list"
+                class="session-assignment-list"
+            >
+                <div class="archive-empty-message">
+                    No eligible unassigned sessions.
+                </div>
+            </div>
+
+
+            <p
+                id="session-assignment-error"
+                class="form-error"
+                aria-live="polite"
+            ></p>
+
+
+            <div class="modal-actions">
+
+                <button
+                    type="button"
+                    id="cancel-session-assignment-button"
+                    class="secondary-button"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="button"
+                    id="assign-selected-sessions-button"
+                    class="save-product-button"
+                    disabled
+                >
+                    Assign Selected Sessions
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
          Production form popup
     ================================================== -->
     <div
@@ -2171,7 +2277,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=priority14c1"></script>
+<script type="module" src="js/app.js?v=priority14c3"></script>
 
 </body>
 </html>

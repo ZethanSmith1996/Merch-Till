@@ -135,6 +135,17 @@ export const dom = {
     archiveUnassignedCount: document.getElementById("archive-unassigned-count"),
     archiveProductionList: document.getElementById("archive-production-list"),
 
+    sessionAssignmentModal: document.getElementById("session-assignment-modal"),
+    sessionAssignmentModalTitle: document.getElementById("session-assignment-modal-title"),
+    sessionAssignmentProductionLabel: document.getElementById("session-assignment-production-label"),
+    sessionAssignmentSelectAll: document.getElementById("session-assignment-select-all"),
+    sessionAssignmentSelectedCount: document.getElementById("session-assignment-selected-count"),
+    sessionAssignmentList: document.getElementById("session-assignment-list"),
+    sessionAssignmentError: document.getElementById("session-assignment-error"),
+    closeSessionAssignmentModalButton: document.getElementById("close-session-assignment-modal"),
+    cancelSessionAssignmentButton: document.getElementById("cancel-session-assignment-button"),
+    assignSelectedSessionsButton: document.getElementById("assign-selected-sessions-button"),
+
     productionModal: document.getElementById("production-modal"),
     productionModalTitle: document.getElementById("production-modal-title"),
     productionForm: document.getElementById("production-form"),
