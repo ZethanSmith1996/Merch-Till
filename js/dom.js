@@ -140,6 +140,7 @@ export const dom = {
     productionProductsProductionLabel: document.getElementById("production-products-production-label"),
     productionProductsSelectAll: document.getElementById("production-products-select-all"),
     productionProductsSelectedCount: document.getElementById("production-products-selected-count"),
+    addUpcomingProductionProductButton: document.getElementById("add-upcoming-production-product"),
     productionProductsList: document.getElementById("production-products-list"),
     productionProductsError: document.getElementById("production-products-error"),
     closeProductionProductsModalButton: document.getElementById("close-production-products-modal"),

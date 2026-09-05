@@ -12,7 +12,7 @@ import {
 import {
     initialiseProductManagement,
     renderProductsTable
-} from "./products.js?v=priority14e1";
+} from "./products.js?v=priority14e6";
 import {
     initialiseTill,
     renderCart,
@@ -41,7 +41,7 @@ import {
 import { initialiseAuditLog } from "./audit-log.js?v=priority10c1";
 import { initialiseOptions, refreshOptionsFromCloud } from "./options.js?v=priority11b";
 import { initialiseProductions, refreshCurrentProduction } from "./productions.js?v=priority14b";
-import { initialiseArchive } from "./archive.js?v=priority14e5";
+import { initialiseArchive } from "./archive.js?v=priority14e6";
 
 function refreshProductDisplays() {
     renderTillProducts();

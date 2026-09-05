@@ -3,6 +3,7 @@ import { supabaseConfig, currencyFormatter } from "./config.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step1e";
 import { canManageArchive } from "./permissions.js";
 import { escapeHTML } from "./utils.js";
+import { openAddProductForProduction } from "./products.js?v=priority14e6";
 
 const DEPARTMENT_KEY = "merch";
 
@@ -2270,6 +2271,13 @@ async function openProductionProductsModal(
     dom.productionProductsError.textContent =
         "";
 
+    if (
+        dom.addUpcomingProductionProductButton
+    ) {
+        dom.addUpcomingProductionProductButton.hidden =
+            production.status !== "upcoming";
+    }
+
     dom.productionProductsList.innerHTML =
         '<div class="archive-empty-message">Loading Products…</div>';
 
@@ -2310,6 +2318,33 @@ async function openProductionProductsModal(
                 ? error.message
                 : String(error);
     }
+}
+
+
+function addProductToUpcomingProduction() {
+    const production =
+        productionProductsProduction;
+
+    if (
+        !production ||
+        production.status !== "upcoming"
+    ) {
+        return;
+    }
+
+    /*
+     * Close the Archive chooser while the existing Product form is open.
+     * After a successful save, the custom event below reopens this Production
+     * and refreshes its assigned-product list.
+     */
+    closeProductionProductsModal();
+
+    openAddProductForProduction(
+        {
+            id: production.id,
+            name: production.name
+        }
+    );
 }
 
 
@@ -3133,6 +3168,50 @@ export function initialiseArchive() {
     );
 
     document.addEventListener(
+        "archive-production-product-created",
+        async function (event) {
+            const productionId =
+                Number(
+                    event.detail?.productionId
+                );
+
+            if (
+                !Number.isFinite(
+                    productionId
+                )
+            ) {
+                return;
+            }
+
+            await loadArchiveData({
+                silent: true
+            });
+
+            const production =
+                productions.find(
+                    function (item) {
+                        return (
+                            Number(item.id) ===
+                            productionId
+                        );
+                    }
+                );
+
+            if (production) {
+                expandedProductionId =
+                    productionId;
+
+                applyArchiveFilters();
+
+                await openProductionProductsModal(
+                    production
+                );
+            }
+        }
+    );
+
+
+    document.addEventListener(
         "production-data-changed",
         function () {
             productionReportCache.clear();
@@ -3147,6 +3226,12 @@ export function initialiseArchive() {
             }
         }
     );
+
+    dom.addUpcomingProductionProductButton
+        ?.addEventListener(
+            "click",
+            addProductToUpcomingProduction
+        );
 
     dom.productionProductsSelectAll
         ?.addEventListener(

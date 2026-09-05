@@ -8,6 +8,10 @@ import { getValidCloudAccessToken } from "./auth.js?v=step3b";
 import { announceProductsChanged, escapeHTML } from "./utils.js";
 import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
 
+let productTargetProductionId = null;
+let productTargetProductionName = "";
+
+
 function getNextProductId() {
     /*
      * Product IDs used to be max(local IDs)+1. Once catalogues are scoped by
@@ -25,6 +29,14 @@ function getNextProductId() {
 
 
 function currentProductProductionId() {
+    if (
+        productTargetProductionId !== null
+    ) {
+        return Number(
+            productTargetProductionId
+        );
+    }
+
     return state.currentProduction
         ? Number(state.currentProduction.id)
         : null;
@@ -918,14 +930,34 @@ function clearVariantRows() {
 }
 
 function openAddProductModal() {
+    openAddProductModalForTarget(
+        null
+    );
+}
+
+
+function openAddProductModalForTarget(
+    production = null
+) {
     if (!requireOnlineProductManagement()) {
         return;
     }
 
+    productTargetProductionId =
+        production
+            ? Number(production.id)
+            : null;
+
+    productTargetProductionName =
+        production?.name || "";
+
     dom.productForm.reset();
     dom.editingProductIdInput.value = "";
     dom.editingProductGroupIdInput.value = "";
-    dom.productModalTitle.textContent = "Add Product";
+    dom.productModalTitle.textContent =
+        production
+            ? `Add Product — ${production.name}`
+            : "Add Product";
     dom.productFormError.textContent = "";
     dom.productTileColorInput.value = "default";
     clearVariantRows();
@@ -934,10 +966,31 @@ function openAddProductModal() {
     dom.productNameInput.focus();
 }
 
+
+export function openAddProductForProduction(
+    production
+) {
+    if (
+        !production ||
+        !Number.isFinite(
+            Number(production.id)
+        )
+    ) {
+        return;
+    }
+
+    openAddProductModalForTarget(
+        production
+    );
+}
+
 function openEditProductModal(productId) {
     if (!requireOnlineProductManagement()) {
         return;
     }
+
+    productTargetProductionId = null;
+    productTargetProductionName = "";
 
     const product = state.products.find(function (item) {
         return item.id === productId;
@@ -987,6 +1040,9 @@ function closeProductModal() {
     dom.productFormError.textContent = "";
     clearVariantRows();
     setVariantMode(false);
+
+    productTargetProductionId = null;
+    productTargetProductionName = "";
 }
 
 function removeProductsFromCart(productIds) {
@@ -1089,6 +1145,12 @@ async function saveProduct(event) {
         dom.productHasVariantsInput.checked;
 
     dom.productFormError.textContent = "";
+
+    const archiveTargetProductionId =
+        productTargetProductionId;
+
+    const archiveTargetProductionName =
+        productTargetProductionName;
 
     try {
         /*
@@ -1449,6 +1511,26 @@ async function saveProduct(event) {
         closeProductModal();
 
         await refreshProductCacheFromCloud();
+
+        if (
+            archiveTargetProductionId !== null
+        ) {
+            document.dispatchEvent(
+                new CustomEvent(
+                    "archive-production-product-created",
+                    {
+                        detail: {
+                            productionId:
+                                Number(
+                                    archiveTargetProductionId
+                                ),
+                            productionName:
+                                archiveTargetProductionName
+                        }
+                    }
+                )
+            );
+        }
 
     } catch (error) {
         console.error(
