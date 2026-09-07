@@ -8,22 +8,22 @@ import {
 import {
     initialiseNavigation,
     applyNavigationPermissions
-} from "./navigation.js?v=priority14c1";
+} from "./navigation.js?v=stage15f2";
 import {
     initialiseProductManagement,
     renderProductsTable
-} from "./products.js?v=priority14e6";
+} from "./products.js?v=stage16b";
 import {
     initialiseTill,
     renderCart,
     renderTillProducts,
     refreshTillAvailability
-} from "./till.js?v=priority13a";
+} from "./till.js?v=stage15e";
 import {
     initialiseSessions,
     renderSessionStatus,
     restoreCurrentOrderNumber
-} from "./sessions.js?v=priority14b";
+} from "./sessions.js?v=stage15e1";
 import {
     initialiseReports,
     renderReports
@@ -37,11 +37,18 @@ import {
     flushPendingCloudSync,
     refreshLocalCacheFromCloud,
     refreshLiveProductsFromCloud
-} from "./cloud-sync.js?v=priority14e1";
-import { initialiseAuditLog } from "./audit-log.js?v=priority10c1";
-import { initialiseOptions, refreshOptionsFromCloud } from "./options.js?v=priority11b";
-import { initialiseProductions, refreshCurrentProduction } from "./productions.js?v=priority14b";
-import { initialiseArchive } from "./archive.js?v=priority14e6";
+} from "./cloud-sync.js?v=stage15e1";
+import { initialiseAuditLog } from "./audit-log.js?v=stage15f";
+import { initialiseOptions, refreshOptionsFromCloud } from "./options.js?v=stage15e";
+import { initialiseDepartments } from "./departments.js?v=stage15f2";
+import {
+    initialiseDepartmentContext,
+    renderDepartmentContext,
+    ensureDepartmentContextForCurrentUser,
+    getCurrentDepartment
+} from "./department-context.js?v=stage15f2";
+import { initialiseProductions, refreshCurrentProduction } from "./productions.js?v=stage15e1";
+import { initialiseArchive } from "./archive.js?v=stage16b";
 
 function refreshProductDisplays() {
     renderTillProducts();
@@ -92,9 +99,48 @@ async function startApplication() {
     initialiseUserManagement();
     initialiseAuditLog();
     initialiseOptions();
+    initialiseDepartments();
+    initialiseDepartmentContext();
     initialiseProductions();
     initialiseArchive();
     initialiseCloudSync();
+
+    document.addEventListener(
+        "department-context-changed",
+        async function () {
+            if (!navigator.onLine) {
+                refreshProductDisplays();
+                refreshTillAvailability();
+                renderSessionStatus();
+                renderReports();
+                renderDepartmentContext();
+                return;
+            }
+
+            /*
+             * Merchandise product visibility depends on the currently active
+             * Production. Refresh that Production first, then fetch the
+             * Department-specific product/session/sale cache.
+             */
+            if (
+                Number(
+                    getCurrentDepartment()?.id || 1
+                ) === 1
+            ) {
+                await refreshCurrentProduction({
+                    silent: true
+                });
+            }
+
+            await refreshLocalCacheFromCloud();
+
+            refreshProductDisplays();
+            refreshTillAvailability();
+            renderSessionStatus();
+            renderReports();
+            renderDepartmentContext();
+        }
+    );
 
     document.addEventListener("products-changed", refreshProductDisplays);
 
@@ -136,7 +182,36 @@ async function startApplication() {
             renderSessionStatus();
         }
     );
-    document.addEventListener("user-role-changed", refreshRolePermissions);
+    document.addEventListener(
+        "user-role-changed",
+        async function () {
+            refreshRolePermissions();
+
+            const signedIn =
+                sessionStorage.getItem(
+                    "merchTillLoggedIn"
+                ) === "true";
+
+            if (!signedIn) {
+                return;
+            }
+
+            const department =
+                await ensureDepartmentContextForCurrentUser();
+
+            if (
+                department &&
+                navigator.onLine
+            ) {
+                /*
+                 * ensureDepartmentContextForCurrentUser dispatches
+                 * department-context-changed, which performs the actual cloud
+                 * refresh. Nothing else is required here.
+                 */
+                renderDepartmentContext();
+            }
+        }
+    );
     document.addEventListener(
         "cloud-order-number-updated",
         function () {
@@ -170,9 +245,19 @@ async function startApplication() {
                 silent: true
             });
 
-            await refreshCurrentProduction({
-                silent: true
-            });
+            await ensureDepartmentContextForCurrentUser();
+
+            renderDepartmentContext();
+
+            if (
+                Number(
+                    getCurrentDepartment()?.id || 1
+                ) === 1
+            ) {
+                await refreshCurrentProduction({
+                    silent: true
+                });
+            }
         } else {
             await flushPendingCloudSync();
         }

@@ -3,7 +3,7 @@ import { supabaseConfig, currencyFormatter } from "./config.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step1e";
 import { canManageArchive } from "./permissions.js";
 import { escapeHTML } from "./utils.js";
-import { openAddProductForProduction } from "./products.js?v=priority14e6";
+import { openAddProductForProduction } from "./products.js?v=stage16b";
 
 const DEPARTMENT_KEY = "merch";
 
@@ -2099,7 +2099,7 @@ async function saveProduction(event) {
             )
         ) {
             dom.productionFormError.textContent =
-                "These dates overlap another Production.";
+                "These dates overlap another active or upcoming Production. Finished Productions do not block these dates, and one Production may end on the same day the next begins.";
         } else {
             dom.productionFormError.textContent =
                 message;
@@ -2274,8 +2274,12 @@ async function openProductionProductsModal(
     if (
         dom.addUpcomingProductionProductButton
     ) {
+        /*
+         * Products can be created directly inside Upcoming, Current
+         * or Finished Productions.
+         */
         dom.addUpcomingProductionProductButton.hidden =
-            production.status !== "upcoming";
+            false;
     }
 
     dom.productionProductsList.innerHTML =
@@ -2325,10 +2329,7 @@ function addProductToUpcomingProduction() {
     const production =
         productionProductsProduction;
 
-    if (
-        !production ||
-        production.status !== "upcoming"
-    ) {
+    if (!production) {
         return;
     }
 

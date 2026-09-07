@@ -15,7 +15,7 @@ import {
 
 import { createSaleRecord } from "./sales.js";
 import { isTrainingUser } from "./permissions.js";
-import { isPaymentTypesEnabled } from "./options.js?v=priority11b";
+import { isPaymentTypesEnabled } from "./options.js?v=stage15e";
 import { collectPayment, initialisePayments } from "./payments.js?v=priority13a";
 import {
     attemptImmediateAtomicSale,

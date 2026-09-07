@@ -7,9 +7,34 @@ import { state } from "./state.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step3b";
 import { announceProductsChanged, escapeHTML } from "./utils.js";
 import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
+import { getCurrentDepartment } from "./department-context.js?v=stage15f2";
 
 let productTargetProductionId = null;
 let productTargetProductionName = "";
+
+
+function currentProductDepartmentId() {
+    /*
+     * Archive product creation always belongs to Merchandise because
+     * Productions are Merchandise-only.
+     */
+    if (
+        productTargetProductionId !== null
+    ) {
+        return 1;
+    }
+
+    return Number(
+        getCurrentDepartment()?.id || 1
+    );
+}
+
+
+function currentDepartmentIsMerchandise() {
+    return (
+        currentProductDepartmentId() === 1
+    );
+}
 
 
 function getNextProductId() {
@@ -37,6 +62,12 @@ function currentProductProductionId() {
         );
     }
 
+    if (
+        !currentDepartmentIsMerchandise()
+    ) {
+        return null;
+    }
+
     return state.currentProduction
         ? Number(state.currentProduction.id)
         : null;
@@ -47,9 +78,20 @@ function productContextQuery() {
     const productionId =
         currentProductProductionId();
 
-    return productionId === null
-        ? "products?select=*&production_id=is.null&order=sort_order.asc,id.asc"
-        : `products?select=*&production_id=eq.${encodeURIComponent(productionId)}&order=sort_order.asc,id.asc`;
+    const departmentId =
+        currentProductDepartmentId();
+
+    const productionFilter =
+        productionId === null
+            ? "production_id=is.null"
+            : `production_id=eq.${encodeURIComponent(productionId)}`;
+
+    return (
+        "products?select=*" +
+        `&department_id=eq.${encodeURIComponent(departmentId)}` +
+        `&${productionFilter}` +
+        "&order=sort_order.asc,id.asc"
+    );
 }
 
 
@@ -290,6 +332,9 @@ function mapProductForCloud(product) {
             product.tileColor || "default",
         production_id:
             product.productionId ?? null,
+        department_id:
+            product.departmentId ??
+            currentProductDepartmentId(),
         cloud_updated_at:
             new Date().toISOString()
     };
@@ -327,7 +372,12 @@ function unmapCloudProduct(row) {
             row.production_id === null ||
             row.production_id === undefined
                 ? null
-                : Number(row.production_id)
+                : Number(row.production_id),
+        departmentId:
+            row.department_id === null ||
+            row.department_id === undefined
+                ? 1
+                : Number(row.department_id)
     };
 }
 
@@ -1309,7 +1359,9 @@ async function saveProduct(event) {
                         ),
                     tileColor,
                     productionId:
-                        currentProductProductionId()
+                        currentProductProductionId(),
+                    departmentId:
+                        currentProductDepartmentId()
                 }];
             }
 
@@ -1403,7 +1455,13 @@ async function saveProduct(event) {
                                     existingGroupProducts[0]
                                         ?.productionId
                                 ) ??
-                                currentProductProductionId()
+                                currentProductProductionId(),
+                            departmentId:
+                                (
+                                    existingGroupProducts[0]
+                                        ?.departmentId
+                                ) ??
+                                currentProductDepartmentId()
                         };
                     }
                 );

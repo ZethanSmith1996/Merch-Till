@@ -1,8 +1,11 @@
 import { dom } from "./dom.js";
-import { canAccessScreen } from "./permissions.js?v=priority14c1";
+import { canAccessScreen } from "./permissions.js?v=stage15b";
+import {
+    selectDepartmentForScreen
+} from "./department-context.js?v=stage15f2";
 
 
-function showScreen(screenId) {
+export function showScreen(screenId) {
     if (!canAccessScreen(screenId)) {
         screenId = "till-section";
     }
@@ -48,17 +51,47 @@ export function applyNavigationPermissions() {
 
 export function initialiseNavigation() {
     dom.navigationButtons.forEach(function (button) {
-        button.addEventListener("click", function () {
-            const selectedScreen =
-                button.dataset.screen;
+        button.addEventListener(
+            "click",
+            async function () {
+                const selectedScreen =
+                    button.dataset.screen;
 
-            if (!canAccessScreen(selectedScreen)) {
-                showScreen("till-section");
-                return;
+                if (
+                    !canAccessScreen(
+                        selectedScreen
+                    )
+                ) {
+                    showScreen(
+                        "till-section"
+                    );
+                    return;
+                }
+
+                const department =
+                    await selectDepartmentForScreen(
+                        selectedScreen
+                    );
+
+                if (
+                    [
+                        "till-section",
+                        "products-section",
+                        "reports-section",
+                        "audit-section"
+                    ].includes(
+                        selectedScreen
+                    ) &&
+                    !department
+                ) {
+                    return;
+                }
+
+                showScreen(
+                    selectedScreen
+                );
             }
-
-            showScreen(selectedScreen);
-        });
+        );
     });
 
     applyNavigationPermissions();

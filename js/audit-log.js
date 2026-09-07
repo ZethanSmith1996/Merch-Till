@@ -3,6 +3,9 @@ import { supabaseConfig } from "./config.js";
 import { getValidCloudAccessToken } from "./auth.js?v=priority10b";
 import { escapeHTML } from "./utils.js";
 import { canViewReports } from "./permissions.js";
+import {
+    getCurrentDepartment
+} from "./department-context.js?v=stage15f2";
 
 let auditEvents = [];
 let auditUsers = [];
@@ -221,7 +224,15 @@ async function loadAuditEvents() {
     try {
         const response =
             await auditCloudRequest(
-                "audit_log?select=id,created_at,user_id,username,action_category,message,details,department&order=created_at.desc&limit=5000",
+                (
+                    "audit_log?select=id,created_at,user_id,username,action_category,message,details,department,department_id" +
+                    `&department_id=eq.${encodeURIComponent(
+                        Number(
+                            getCurrentDepartment()?.id || 1
+                        )
+                    )}` +
+                    "&order=created_at.desc&limit=5000"
+                ),
                 {
                     method: "GET",
                     headers: {
@@ -244,7 +255,10 @@ async function loadAuditEvents() {
         applyAuditFilters();
 
         setAuditStatus(
-            "Audit Log loaded successfully."
+            `Audit Log loaded for ${
+                getCurrentDepartment()?.name ||
+                "Merchandise"
+            }.`
         );
 
     } catch (error) {
@@ -550,7 +564,9 @@ export async function logAuditEvent(
                         p_details:
                             details || {},
                         p_department:
-                            department,
+                            department ||
+                            getCurrentDepartment()?.key ||
+                            "merchandise",
                         p_event_key:
                             eventKey
                     })
@@ -664,6 +680,20 @@ export function initialiseAuditLog() {
             }
         }
     );
+
+    document.addEventListener(
+        "department-context-changed",
+        function () {
+            if (
+                dom.auditSection &&
+                !dom.auditSection.hidden &&
+                navigator.onLine
+            ) {
+                loadAuditEvents();
+            }
+        }
+    );
+
 
     window.addEventListener(
         "offline",

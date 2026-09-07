@@ -6,6 +6,7 @@ import { canManageSessions, isTrainingUser } from "./permissions.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step3c";
 import { supabaseConfig, currencyFormatter } from "./config.js?v=step3c";
 import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
+import { getCurrentDepartment } from "./department-context.js?v=stage15f2";
 
 
 function setSessionCloudStatus(message, isError = false) {
@@ -62,6 +63,11 @@ function mapSessionForCloud(session) {
         status: session.status || (session.closedAt ? "closed" : "open"),
         production_id:
             session.productionId ?? null,
+        department_id:
+            session.departmentId ??
+            Number(
+                getCurrentDepartment()?.id || 1
+            ),
         cloud_updated_at: new Date().toISOString()
     };
 }
@@ -78,7 +84,12 @@ function unmapCloudSession(row) {
             row.production_id === null ||
             row.production_id === undefined
                 ? null
-                : Number(row.production_id)
+                : Number(row.production_id),
+        departmentId:
+            row.department_id === null ||
+            row.department_id === undefined
+                ? 1
+                : Number(row.department_id)
     };
 }
 
@@ -90,8 +101,13 @@ function createUniqueSessionId() {
 }
 
 async function fetchAuthoritativeCloudSessions() {
+    const departmentId =
+        Number(
+            getCurrentDepartment()?.id || 1
+        );
+
     const response = await sessionCloudRequest(
-        "sessions?select=*&order=opened_at.desc",
+        `sessions?select=*&department_id=eq.${encodeURIComponent(departmentId)}&order=opened_at.desc`,
         {
             method: "GET",
             headers: { "Accept": "application/json" }
@@ -329,9 +345,12 @@ async function startSession() {
             "Starting trading session in Supabase…"
         );
 
+        const department =
+            getCurrentDepartment();
+
         const response =
             await sessionCloudRequest(
-                "rpc/start_trading_session",
+                "rpc/start_department_trading_session",
                 {
                     method: "POST",
                     headers: {
@@ -344,8 +363,10 @@ async function startSession() {
                         JSON.stringify({
                             p_session_id:
                                 requestedSessionId,
-                            p_department_key:
-                                "merch"
+                            p_department_id:
+                                Number(
+                                    department?.id || 1
+                                )
                         })
                 }
             );
@@ -377,7 +398,8 @@ async function startSession() {
                     result?.production_name ??
                     null
             },
-            `session-open:${sessionId}`
+            `session-open:${sessionId}`,
+            getCurrentDepartment()?.key || "merchandise"
         );
 
         await refreshSessionCacheFromCloud();
@@ -516,7 +538,8 @@ async function cashOffSession() {
                 transactions:
                     sessionSales.length
             },
-            `session-close:${cloudSession.id}`
+            `session-close:${cloudSession.id}`,
+            getCurrentDepartment()?.key || "merchandise"
         );
 
         clearCart();

@@ -1,5 +1,6 @@
 import { dom } from "./dom.js";
 import { state } from "./state.js";
+import { getCurrentDepartment } from "./department-context.js?v=stage15f2";
 import { supabaseConfig } from "./config.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step1e";
 
@@ -89,6 +90,20 @@ export function renderCurrentProduction() {
         return;
     }
 
+    const department =
+        getCurrentDepartment();
+
+    if (
+        Number(department?.id || 1) !== 1
+    ) {
+        dom.productionStatusPill.hidden =
+            true;
+        return;
+    }
+
+    dom.productionStatusPill.hidden =
+        false;
+
     dom.productionStatusPill.classList.remove(
         "production-active",
         "no-production",
@@ -126,6 +141,19 @@ function renderChecking() {
     ) {
         return;
     }
+
+    if (
+        Number(
+            getCurrentDepartment()?.id || 1
+        ) !== 1
+    ) {
+        dom.productionStatusPill.hidden =
+            true;
+        return;
+    }
+
+    dom.productionStatusPill.hidden =
+        false;
 
     dom.productionStatusPill.classList.remove(
         "production-active",
@@ -290,6 +318,14 @@ export function initialiseProductions() {
             }
         }
     );
+
+    document.addEventListener(
+        "department-context-changed",
+        function () {
+            renderCurrentProduction();
+        }
+    );
+
 
     document.addEventListener(
         "production-data-changed",

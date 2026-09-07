@@ -4,6 +4,7 @@ import { supabaseConfig } from "./config.js";
 import { isMasterAdmin } from "./permissions.js";
 import { getValidCloudAccessToken, isCloudUsername } from "./auth.js";
 import { logAuditEvent } from "./audit-log.js?v=priority10c";
+import { getCurrentDepartment } from "./department-context.js?v=stage15f2";
 import {
     replaceCloudDataInDatabase,
     replaceCloudCatalogueInDatabase,
@@ -68,7 +69,12 @@ function unmapProduct(row) {
             row.production_id === null ||
             row.production_id === undefined
                 ? null
-                : Number(row.production_id)
+                : Number(row.production_id),
+        departmentId:
+            row.department_id === null ||
+            row.department_id === undefined
+                ? 1
+                : Number(row.department_id)
     };
 }
 
@@ -84,7 +90,12 @@ function unmapSession(row) {
             row.production_id === null ||
             row.production_id === undefined
                 ? null
-                : Number(row.production_id)
+                : Number(row.production_id),
+        departmentId:
+            row.department_id === null ||
+            row.department_id === undefined
+                ? 1
+                : Number(row.department_id)
     };
 }
 
@@ -122,7 +133,12 @@ function unmapSale(row) {
                 : [],
         voided: Boolean(row.voided),
         voidedAt: row.voided_at || null,
-        voidedBy: row.voided_by || null
+        voidedBy: row.voided_by || null,
+        departmentId:
+            row.department_id === null ||
+            row.department_id === undefined
+                ? 1
+                : Number(row.department_id)
     };
 }
 
@@ -143,6 +159,11 @@ function mapProduct(product) {
         tile_color: product.tileColor || "default",
         production_id:
             product.productionId ?? null,
+        department_id:
+            product.departmentId ??
+            Number(
+                getCurrentDepartment()?.id || 1
+            ),
         cloud_updated_at: new Date().toISOString()
     };
 }
@@ -157,6 +178,11 @@ function mapSession(session) {
         status: session.status || (session.closedAt ? "closed" : "open"),
         production_id:
             session.productionId ?? null,
+        department_id:
+            session.departmentId ??
+            Number(
+                getCurrentDepartment()?.id || 1
+            ),
         cloud_updated_at: new Date().toISOString()
     };
 }
@@ -196,6 +222,11 @@ function mapSale(sale) {
         voided: Boolean(sale.voided),
         voided_at: sale.voidedAt || null,
         voided_by: sale.voidedBy || null,
+        department_id:
+            sale.departmentId ??
+            Number(
+                getCurrentDepartment()?.id || 1
+            ),
         cloud_updated_at: new Date().toISOString()
     };
 }
@@ -798,7 +829,20 @@ async function fetchCloudRows(tableName, select = "*") {
 }
 
 
+function currentLiveDepartmentId() {
+    return Number(
+        getCurrentDepartment()?.id || 1
+    );
+}
+
+
 function currentLiveProductionId() {
+    if (
+        currentLiveDepartmentId() !== 1
+    ) {
+        return null;
+    }
+
     return state.currentProduction
         ? Number(state.currentProduction.id)
         : null;
@@ -808,6 +852,9 @@ function currentLiveProductionId() {
 function liveProductFilterQuery(
     select = "*"
 ) {
+    const departmentId =
+        currentLiveDepartmentId();
+
     const productionId =
         currentLiveProductionId();
 
@@ -818,8 +865,22 @@ function liveProductFilterQuery(
 
     return (
         `products?select=${encodeURIComponent(select)}` +
+        `&department_id=eq.${encodeURIComponent(departmentId)}` +
         `&${productionFilter}` +
         "&order=sort_order.asc,id.asc"
+    );
+}
+
+
+function departmentTableQuery(
+    tableName,
+    select = "*",
+    extra = ""
+) {
+    return (
+        `${tableName}?select=${encodeURIComponent(select)}` +
+        `&department_id=eq.${encodeURIComponent(currentLiveDepartmentId())}` +
+        extra
     );
 }
 
@@ -1253,9 +1314,45 @@ export async function refreshLocalCacheFromCloud() {
         const productRows =
             await fetchLiveProductRows();
 
+        const sessionResponse =
+            await cloudRequest(
+                departmentTableQuery(
+                    "sessions",
+                    "*",
+                    "&order=opened_at.desc"
+                ),
+                {
+                    method: "GET",
+                    headers: {
+                        "Accept": "application/json"
+                    }
+                }
+            );
+
         const sessionRows =
-            await fetchCloudRows("sessions");
-        const saleRows = staffMode ? null : await fetchCloudRows("sales");
+            await sessionResponse.json();
+
+        let saleRows = null;
+
+        if (!staffMode) {
+            const saleResponse =
+                await cloudRequest(
+                    departmentTableQuery(
+                        "sales",
+                        "*",
+                        "&order=created_at.desc"
+                    ),
+                    {
+                        method: "GET",
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    }
+                );
+
+            saleRows =
+                await saleResponse.json();
+        }
 
         const products = productRows
             .map(unmapProduct)

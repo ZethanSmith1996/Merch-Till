@@ -3440,3 +3440,542 @@ select:focus {
         justify-content: space-between;
     }
 }
+
+
+/* ==================================================
+   Stage 15A — Department foundation
+================================================== */
+
+.departments-options-panel {
+    margin-bottom: 18px;
+}
+
+/* ==================================================
+   Stage 15B — Departments Management
+================================================== */
+
+.departments-section-block { margin-top: 22px; }
+
+.departments-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 10px;
+}
+
+.departments-section-heading h3 { margin: 0; }
+
+.departments-section-heading span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    min-height: 30px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: var(--grey-200);
+    color: var(--grey-700);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.departments-list { display: grid; gap: 10px; }
+
+.department-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 16px 18px;
+    border: 1px solid var(--grey-300);
+    border-radius: 12px;
+    background: var(--white);
+}
+
+.department-card-copy { min-width: 0; }
+
+.department-card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.department-card-title-row h4 {
+    margin: 0;
+    font-size: 17px;
+}
+
+.department-card-meta {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+    color: var(--grey-600);
+    font-size: 12px;
+}
+
+.department-built-in { font-weight: 800; }
+
+.department-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.department-status-badge.active {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.department-status-badge.disabled {
+    background: var(--grey-200);
+    color: var(--grey-700);
+}
+
+.department-card-actions { flex: 0 0 auto; }
+
+.department-protected-copy {
+    color: var(--grey-500);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.departments-empty-message { min-height: 100px; }
+
+.department-modal-box { max-width: 520px; }
+
+@media (max-width: 650px) {
+    .department-card {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .department-card-actions { width: 100%; }
+    .department-card-actions button { width: 100%; }
+}
+
+
+/* ==================================================
+   Stage 15C.1 — Department Selection / Context
+================================================== */
+
+.department-context-badge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    margin-top: 7px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: var(--grey-200);
+    color: var(--grey-700);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.department-context-badge[hidden] {
+    display: none;
+}
+
+.department-selector-modal-box {
+    max-width: 560px;
+}
+
+.department-selector-copy {
+    margin: 4px 0 0;
+    color: var(--grey-600);
+}
+
+.department-selector-list {
+    display: grid;
+    gap: 9px;
+    margin-top: 16px;
+}
+
+.department-selector-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--grey-300);
+    border-radius: 11px;
+    background: var(--white);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.department-selector-button:hover {
+    background: var(--grey-100);
+}
+
+.department-selector-button.current {
+    border-width: 2px;
+}
+
+.department-selector-button strong,
+.department-selector-button small {
+    display: block;
+}
+
+.department-selector-button small {
+    margin-top: 3px;
+    color: var(--grey-600);
+}
+
+.department-selector-arrow {
+    flex: 0 0 auto;
+    font-size: 25px;
+    line-height: 1;
+}
+
+
+/* ==================================================
+   Stage 15C.2 — Per-device Department Availability
+================================================== */
+
+.device-department-note {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--grey-300);
+    border-radius: 10px;
+    background: var(--grey-100);
+}
+
+.device-department-note strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.device-department-note p {
+    margin: 0;
+    color: var(--grey-600);
+    font-size: 13px;
+}
+
+.department-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.department-device-availability {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--grey-700);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.department-device-availability > span:first-child {
+    white-space: nowrap;
+}
+
+.department-device-availability .option-switch {
+    margin: 0;
+}
+
+.department-device-availability input:disabled +
+.option-switch-track {
+    opacity: 0.45;
+}
+
+@media (max-width: 760px) {
+    .department-card-actions {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .department-device-availability {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+
+/* ==================================================
+   Stage 15C.2 — UI polish (corrected)
+================================================== */
+
+.section-title-with-department {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.section-title-with-department h2 {
+    margin: 0;
+}
+
+.section-title-with-department .department-context-badge {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 7px 12px;
+    border: 1px solid var(--grey-300);
+    border-radius: 999px;
+    background: var(--grey-200);
+    color: var(--grey-700);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.section-title-with-department .department-context-badge[hidden] {
+    display: none;
+}
+
+.department-permanent-button,
+.department-permanent-button:disabled {
+    opacity: 1;
+    cursor: default;
+    pointer-events: none;
+}
+
+
+/* ==================================================
+   Stage 15D — Department badge colours
+================================================== */
+
+.department-badge-colour-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--grey-700);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.department-badge-colour-control select {
+    min-height: 38px;
+    padding: 6px 30px 6px 10px;
+    border: 1px solid var(--grey-300);
+    border-radius: 8px;
+    background: var(--white);
+    color: inherit;
+    font: inherit;
+}
+
+.department-context-badge.department-badge-default {
+    background: var(--grey-200);
+    color: var(--grey-700);
+}
+
+.department-context-badge.department-badge-blue {
+    background: #dbeafe;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+}
+
+.department-context-badge.department-badge-green {
+    background: #dcfce7;
+    border-color: #bbf7d0;
+    color: #166534;
+}
+
+.department-context-badge.department-badge-pink {
+    background: #fce7f3;
+    border-color: #fbcfe8;
+    color: #be185d;
+}
+
+.department-context-badge.department-badge-purple {
+    background: #f3e8ff;
+    border-color: #e9d5ff;
+    color: #7e22ce;
+}
+
+.department-context-badge.department-badge-orange {
+    background: #ffedd5;
+    border-color: #fed7aa;
+    color: #c2410c;
+}
+
+.department-context-badge.department-badge-yellow {
+    background: #fef9c3;
+    border-color: #fef08a;
+    color: #854d0e;
+}
+
+@media (max-width: 900px) {
+    .department-badge-colour-control {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+
+/* ==================================================
+   Stage 15E — Department-specific Options
+================================================== */
+
+.department-options-list {
+    display: grid;
+}
+
+.department-options-list[hidden] {
+    display: none;
+}
+
+.department-option-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 14px 0;
+    border-top: 1px solid var(--grey-200);
+}
+
+.department-option-row:first-child {
+    border-top: 0;
+}
+
+.department-option-copy {
+    min-width: 0;
+}
+
+.department-option-copy strong,
+.department-option-copy small {
+    display: block;
+}
+
+.department-option-copy small {
+    margin-top: 3px;
+    color: var(--grey-600);
+}
+
+.department-options-empty {
+    margin: 0;
+    padding: 14px 0;
+    color: var(--grey-600);
+}
+
+@media (max-width: 650px) {
+    .department-option-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
+
+/* ==================================================
+   Stage 15F.2 — Disabled Department management/history
+================================================== */
+
+.disabled-department-selector-section {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--grey-200);
+}
+
+.disabled-department-selector-section[hidden],
+.disabled-department-selector-list[hidden] {
+    display: none;
+}
+
+.disabled-department-toggle {
+    width: 100%;
+}
+
+.disabled-department-selector-list {
+    margin-top: 10px;
+}
+
+.department-selector-button.disabled-history {
+    opacity: 0.82;
+    border-style: dashed;
+}
+
+.department-selector-button.disabled-history small {
+    color: var(--grey-600);
+}
+
+.department-manage-button {
+    min-width: 88px;
+}
+
+@media (max-width: 760px) {
+    .department-card-actions .department-manage-button {
+        width: 100%;
+    }
+}
+
+/* ==================================================
+   Stage 15F.2 — Department action button alignment
+================================================== */
+
+/*
+ * Keep the action buttons compact so the Badge Colour
+ * selector has enough room.
+ */
+.department-card-actions .department-manage-button,
+.department-card-actions .department-disable-button,
+.department-card-actions .department-enable-button,
+.department-card-actions .department-permanent-button {
+    width: 150px;
+    min-width: 150px;
+    max-width: 150px;
+    flex: 0 0 150px;
+}
+
+
+/*
+ * Manage can be slightly narrower than the final
+ * Disable / Enable / Permanent column.
+ */
+.department-card-actions .department-manage-button {
+    width: 135px;
+    min-width: 135px;
+    max-width: 135px;
+    flex-basis: 135px;
+}
+
+
+/*
+ * Disable, Enable and Permanent always occupy exactly
+ * the same width, keeping that final column aligned.
+ */
+.department-card-actions .department-disable-button,
+.department-card-actions .department-enable-button,
+.department-card-actions .department-permanent-button {
+    width: 150px;
+    min-width: 150px;
+    max-width: 150px;
+    flex-basis: 150px;
+}
+
+
+/*
+ * Prevent the Badge Colour control being squeezed out
+ * by the action buttons.
+ */
+.department-badge-colour-control {
+    flex-shrink: 0;
+}
+
+
+/*
+ * Retain the existing mobile layout.
+ */
+@media (max-width: 760px) {
+
+    .department-card-actions .department-manage-button,
+    .department-card-actions .department-disable-button,
+    .department-card-actions .department-enable-button,
+    .department-card-actions .department-permanent-button {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        flex-basis: auto;
+    }
+}

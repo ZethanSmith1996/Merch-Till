@@ -51,7 +51,7 @@
         href="icons/icon-192.png"
     >
 
-    <link rel="stylesheet" href="style.css?v=priority14e6">
+    <link rel="stylesheet" href="style.css?v=stage15f2">
 </head>
 
 <body>
@@ -231,6 +231,15 @@
                 <button
                     type="button"
                     class="nav-button"
+                    data-screen="departments-section"
+                    id="departments-nav-button"
+                >
+                    Departments
+                </button>
+
+                <button
+                    type="button"
+                    class="nav-button"
                     data-screen="options-section"
                     id="options-nav-button"
                 >
@@ -261,7 +270,17 @@
                     <div class="section-heading">
 
                         <div>
-                            <h2>Till</h2>
+                            <div class="section-title-with-department">
+                                <h2>Till</h2>
+
+                                <span
+                                    id="till-department-context"
+                                    class="department-context-badge"
+                                    hidden
+                                >
+                                    Merchandise
+                                </span>
+                            </div>
 
                             <p>
                                 Select a product to add it to the current order.
@@ -449,7 +468,17 @@
                     <div class="section-heading">
 
                         <div>
-                            <h2>Products</h2>
+                            <div class="section-title-with-department">
+                                <h2>Products</h2>
+
+                                <span
+                                    id="products-department-context"
+                                    class="department-context-badge"
+                                    hidden
+                                >
+                                    Merchandise
+                                </span>
+                            </div>
 
                             <p>
                                 Add, edit and manage your stock.
@@ -517,7 +546,17 @@
                     <div class="section-heading reports-heading">
 
                         <div>
-                            <h2>Reports</h2>
+                            <div class="section-title-with-department">
+                                <h2>Reports</h2>
+
+                                <span
+                                    id="reports-department-context"
+                                    class="department-context-badge"
+                                    hidden
+                                >
+                                    Merchandise
+                                </span>
+                            </div>
 
                             <p>
                                 View overall sales or compare individual
@@ -747,7 +786,17 @@
                     <div class="section-heading">
 
                         <div>
-                            <h2>Audit Log</h2>
+                            <div class="section-title-with-department">
+                                <h2>Audit Log</h2>
+
+                                <span
+                                    id="audit-department-context"
+                                    class="department-context-badge"
+                                    hidden
+                                >
+                                    Merchandise
+                                </span>
+                            </div>
 
                             <p>
                                 Permanent record of Till activity. Audit entries cannot be edited or deleted.
@@ -942,10 +991,19 @@
                     <div class="section-heading archive-heading">
 
                         <div>
-                            <h2>Archive</h2>
+                            <div class="section-title-with-department">
+                                <h2>Archive</h2>
+
+                                <span
+                                    id="archive-department-context"
+                                    class="department-context-badge department-badge-default"
+                                >
+                                    Merchandise
+                                </span>
+                            </div>
 
                             <p>
-                                Create, manage and review Productions.
+                                Create, manage and review Merchandise Productions.
                             </p>
                         </div>
 
@@ -1127,15 +1185,17 @@
                     </div>
 
 
-                    <div class="options-panel">
+                    <div class="options-panel departments-options-panel">
 
                         <div class="options-group-heading">
 
                             <div>
-                                <h3>Checkout</h3>
+                                <h3>Departments</h3>
 
                                 <p>
-                                    Settings that control optional steps during a sale.
+                                    Enable multiple permanent venue Departments.
+                                    When switched off, the Till continues to behave exactly
+                                    like the current single Merchandise Till.
                                 </p>
                             </div>
 
@@ -1151,6 +1211,80 @@
                             <div class="option-copy">
 
                                 <label
+                                    for="departments-enabled-option"
+                                    class="option-title"
+                                >
+                                    Departments
+                                </label>
+
+                                <p>
+                                    When enabled, the existing Till data becomes the
+                                    Merchandise Department. Department navigation and setup
+                                    will be added in the next Stage 15 steps.
+                                </p>
+
+                            </div>
+
+
+                            <label
+                                class="option-switch"
+                                aria-label="Departments"
+                            >
+                                <input
+                                    type="checkbox"
+                                    id="departments-enabled-option"
+                                >
+
+                                <span
+                                    class="option-switch-track"
+                                    aria-hidden="true"
+                                >
+                                    <span class="option-switch-thumb"></span>
+                                </span>
+
+                                <span
+                                    id="departments-enabled-option-label"
+                                    class="option-switch-label"
+                                >
+                                    Off
+                                </span>
+                            </label>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="options-panel">
+
+                        <div class="options-group-heading">
+
+                            <div>
+                                <h3>Checkout</h3>
+
+                                <p>
+                                    Settings that control optional steps during a sale.
+                                </p>
+                            </div>
+
+                            <span
+                                id="checkout-options-scope-badge"
+                                class="options-scope-badge"
+                            >
+                                Global
+                            </span>
+
+                        </div>
+
+
+                        <div
+                            id="global-payment-types-option-row"
+                            class="option-row"
+                        >
+
+                            <div class="option-copy">
+
+                                <label
                                     for="payment-types-option"
                                     class="option-title"
                                 >
@@ -1158,9 +1292,7 @@
                                 </label>
 
                                 <p>
-                                    When enabled, checkout can support Cash, Card and Split payments.
-                                    The current fast Complete Sale flow remains unchanged until the
-                                    payment feature itself is added in Priority 13.
+                                    When enabled, checkout supports Cash, Card and Split payments.
                                 </p>
 
                             </div>
@@ -1192,6 +1324,13 @@
 
                         </div>
 
+
+                        <div
+                            id="department-payment-types-options"
+                            class="department-options-list"
+                            hidden
+                        ></div>
+
                     </div>
 
 
@@ -1202,6 +1341,82 @@
                     >
                         Open Options while online to load the latest settings.
                     </p>
+
+                </section>
+
+
+                <section
+                    id="departments-section"
+                    class="app-section"
+                    hidden
+                >
+
+                    <div class="section-heading">
+                        <div>
+                            <h2>Departments</h2>
+                            <p>
+                                Set up permanent venue Departments before they are made available operationally.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            id="add-department-button"
+                            class="add-product-button"
+                        >
+                            + Add Department
+                        </button>
+                    </div>
+
+                    <p
+                        id="departments-status"
+                        class="options-status"
+                        aria-live="polite"
+                    >
+                        Loading Departments…
+                    </p>
+
+                    <div class="device-department-note">
+                        <strong>Available on this Device</strong>
+
+                        <p>
+                            These switches affect Staff/Admin on this browser or installed app only.
+                            Manager and Master can always access every active Department.
+                        </p>
+                    </div>
+
+                    <div class="departments-section-block">
+                        <div class="departments-section-heading">
+                            <h3>Active Departments</h3>
+                            <span id="active-departments-count">0</span>
+                        </div>
+
+                        <div id="active-departments-list" class="departments-list"></div>
+
+                        <div
+                            id="no-active-departments-message"
+                            class="archive-empty-message departments-empty-message"
+                            hidden
+                        >
+                            No active Departments.
+                        </div>
+                    </div>
+
+                    <div class="departments-section-block">
+                        <div class="departments-section-heading">
+                            <h3>Disabled Departments</h3>
+                            <span id="disabled-departments-count">0</span>
+                        </div>
+
+                        <div id="disabled-departments-list" class="departments-list"></div>
+
+                        <div
+                            id="no-disabled-departments-message"
+                            class="archive-empty-message departments-empty-message"
+                        >
+                            No disabled Departments.
+                        </div>
+                    </div>
 
                 </section>
 
@@ -1286,6 +1501,169 @@
         </div>
 
     </main>
+
+
+    <!-- ==================================================
+         Department selector popup
+    ================================================== -->
+    <div
+        id="department-selector-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box department-selector-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="department-selector-title"
+        >
+
+            <div class="modal-header">
+
+                <div>
+                    <h2 id="department-selector-title">
+                        Select Department
+                    </h2>
+
+                    <p
+                        id="department-selector-copy"
+                        class="department-selector-copy"
+                    >
+                        Choose the Department to open.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    id="close-department-selector"
+                    class="modal-close-button"
+                    aria-label="Close Department selector"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <div
+                id="department-selector-list"
+                class="department-selector-list"
+            ></div>
+
+
+            <div
+                id="disabled-department-selector-section"
+                class="disabled-department-selector-section"
+                hidden
+            >
+                <button
+                    type="button"
+                    id="toggle-disabled-departments"
+                    class="secondary-button disabled-department-toggle"
+                    aria-expanded="false"
+                >
+                    Show Disabled Departments
+                </button>
+
+                <div
+                    id="disabled-department-selector-list"
+                    class="department-selector-list disabled-department-selector-list"
+                    hidden
+                ></div>
+            </div>
+
+
+            <p
+                id="department-selector-error"
+                class="form-error"
+                aria-live="polite"
+            ></p>
+
+
+            <div class="modal-actions">
+
+                <button
+                    type="button"
+                    id="cancel-department-selector"
+                    class="secondary-button"
+                >
+                    Cancel
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
+         Add Department popup
+    ================================================== -->
+    <div id="department-modal" class="modal-overlay" hidden>
+        <div
+            class="modal-box department-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="department-modal-title"
+        >
+            <div class="modal-header">
+                <h2 id="department-modal-title">Add Department</h2>
+
+                <button
+                    type="button"
+                    id="close-department-modal"
+                    class="modal-close-button"
+                    aria-label="Close Department form"
+                >
+                    ×
+                </button>
+            </div>
+
+            <form id="department-form">
+                <div class="form-group">
+                    <label for="department-name">Department Name</label>
+
+                    <input
+                        type="text"
+                        id="department-name"
+                        maxlength="80"
+                        autocomplete="off"
+                        placeholder="e.g. Ballroom"
+                        required
+                    >
+                </div>
+
+                <p class="field-help">
+                    This is the permanent venue/location name shown throughout the Till.
+                </p>
+
+                <p
+                    id="department-form-error"
+                    class="form-error"
+                    aria-live="polite"
+                ></p>
+
+                <div class="modal-actions">
+                    <button
+                        type="button"
+                        id="cancel-department-button"
+                        class="secondary-button"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="save-product-button"
+                    >
+                        Create Department
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
 
     <!-- ==================================================
@@ -1768,7 +2146,7 @@
 
 
             <p class="field-help production-products-help">
-                Tick the products that belong to this Production. Unticked products remain or return to Unassigned.
+                Tick existing products that belong to this Production, or use + Add Product to create a new product directly in this Production. Unticked products remain or return to Unassigned.
             </p>
 
 
@@ -2400,7 +2778,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=priority14e6"></script>
+<script type="module" src="js/app.js?v=stage16b"></script>
 
 </body>
 </html>

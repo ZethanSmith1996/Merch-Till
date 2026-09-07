@@ -4,15 +4,27 @@ import {
     getValidCloudAccessToken,
     isCloudUsername
 } from "./auth.js?v=step1e";
-import { canManageOptions } from "./permissions.js";
+import {
+    canManageOptions
+} from "./permissions.js?v=stage15b";
+import { escapeHTML } from "./utils.js";
+
 
 const OPTIONS_CACHE_KEY =
-    "merchTillOptionsCacheV1";
+    "merchTillOptionsCache";
+
+const SELECTED_DEPARTMENT_KEY =
+    "merchTillSelectedDepartment";
+
 
 const optionState = {
+    departmentsEnabled: false,
     paymentTypesEnabled: false,
+    departmentPaymentTypes: {},
+    departments: [],
     loadedFromCloud: false
 };
+
 
 let refreshInProgress = false;
 let saveInProgress = false;
@@ -28,42 +40,30 @@ function currentUsername() {
 }
 
 
-function readCachedOptions() {
+function currentDepartmentId() {
     try {
-        const saved =
+        const department =
             JSON.parse(
-                localStorage.getItem(
-                    OPTIONS_CACHE_KEY
-                ) || "{}"
+                sessionStorage.getItem(
+                    SELECTED_DEPARTMENT_KEY
+                ) || "null"
             );
 
         if (
-            typeof saved
-                .paymentTypesEnabled ===
-            "boolean"
+            department &&
+            Number.isFinite(
+                Number(department.id)
+            )
         ) {
-            optionState
-                .paymentTypesEnabled =
-                saved.paymentTypesEnabled;
+            return Number(
+                department.id
+            );
         }
     } catch (error) {
-        console.warn(
-            "Options cache could not be read:",
-            error
-        );
+        // Use Merchandise fallback.
     }
-}
 
-
-function writeCachedOptions() {
-    localStorage.setItem(
-        OPTIONS_CACHE_KEY,
-        JSON.stringify({
-            paymentTypesEnabled:
-                optionState
-                    .paymentTypesEnabled
-        })
-    );
+    return 1;
 }
 
 
@@ -79,13 +79,277 @@ function setOptionsStatus(
         message;
 
     dom.optionsStatus.classList.toggle(
-        "options-error",
+        "cloud-upload-error",
         isError
     );
 }
 
 
+function readCachedOptions() {
+    try {
+        const saved =
+            JSON.parse(
+                localStorage.getItem(
+                    OPTIONS_CACHE_KEY
+                ) || "{}"
+            );
+
+        if (
+            typeof saved
+                .departmentsEnabled ===
+            "boolean"
+        ) {
+            optionState
+                .departmentsEnabled =
+                saved.departmentsEnabled;
+        }
+
+        if (
+            typeof saved
+                .paymentTypesEnabled ===
+            "boolean"
+        ) {
+            optionState
+                .paymentTypesEnabled =
+                saved.paymentTypesEnabled;
+        }
+
+        if (
+            saved.departmentPaymentTypes &&
+            typeof saved.departmentPaymentTypes ===
+                "object"
+        ) {
+            optionState
+                .departmentPaymentTypes =
+                {
+                    ...saved
+                        .departmentPaymentTypes
+                };
+        }
+
+        if (
+            Array.isArray(
+                saved.departments
+            )
+        ) {
+            optionState.departments =
+                saved.departments;
+        }
+
+    } catch (error) {
+        console.warn(
+            "Cached Options could not be read:",
+            error
+        );
+    }
+}
+
+
+function writeCachedOptions() {
+    localStorage.setItem(
+        OPTIONS_CACHE_KEY,
+        JSON.stringify({
+            departmentsEnabled:
+                optionState
+                    .departmentsEnabled,
+            paymentTypesEnabled:
+                optionState
+                    .paymentTypesEnabled,
+            departmentPaymentTypes:
+                optionState
+                    .departmentPaymentTypes,
+            departments:
+                optionState
+                    .departments
+        })
+    );
+}
+
+
+function normaliseDepartment(row) {
+    return {
+        id:
+            Number(row.id),
+        name:
+            row.name ||
+            "Department",
+        active:
+            row.active !== false,
+        isMerchandise:
+            row.is_merchandise === true ||
+            row.isMerchandise === true,
+        badgeColor:
+            row.badge_color ||
+            row.badgeColor ||
+            "default"
+    };
+}
+
+
+function paymentEnabledForDepartment(
+    departmentId
+) {
+    const key =
+        String(
+            departmentId || 1
+        );
+
+    if (
+        Object.prototype
+            .hasOwnProperty
+            .call(
+                optionState
+                    .departmentPaymentTypes,
+                key
+            )
+    ) {
+        return (
+            optionState
+                .departmentPaymentTypes[
+                    key
+                ] === true
+        );
+    }
+
+    /*
+     * A Department with no explicit setting inherits the legacy/global
+     * Payment Types value. This means newly-created Departments behave
+     * predictably until Master chooses a Department-specific value.
+     */
+    return optionState
+        .paymentTypesEnabled;
+}
+
+
+function renderDepartmentPaymentRows() {
+    if (
+        !dom.departmentPaymentTypesOptions
+    ) {
+        return;
+    }
+
+    dom.departmentPaymentTypesOptions
+        .innerHTML = "";
+
+    optionState
+        .departments
+        .forEach(
+            function (department) {
+                const enabled =
+                    paymentEnabledForDepartment(
+                        department.id
+                    );
+
+                const row =
+                    document.createElement(
+                        "div"
+                    );
+
+                row.className =
+                    "department-option-row";
+
+                row.innerHTML = `
+                    <div class="department-option-copy">
+                        <strong>
+                            ${escapeHTML(department.name)}
+                        </strong>
+
+                        <small>
+                            ${
+                                department.active
+                                    ? "Active Department"
+                                    : "Disabled Department"
+                            }
+                        </small>
+                    </div>
+
+                    <label
+                        class="option-switch"
+                        aria-label="${escapeHTML(department.name)} Payment Types"
+                    >
+                        <input
+                            type="checkbox"
+                            data-department-payment-option="${department.id}"
+                            ${enabled ? "checked" : ""}
+                        >
+
+                        <span
+                            class="option-switch-track"
+                            aria-hidden="true"
+                        >
+                            <span class="option-switch-thumb"></span>
+                        </span>
+
+                        <span class="option-switch-label">
+                            ${enabled ? "On" : "Off"}
+                        </span>
+                    </label>
+                `;
+
+                const input =
+                    row.querySelector(
+                        "[data-department-payment-option]"
+                    );
+
+                input.disabled =
+                    saveInProgress ||
+                    refreshInProgress ||
+                    !navigator.onLine;
+
+                input.addEventListener(
+                    "change",
+                    function () {
+                        changeDepartmentPaymentTypes(
+                            department,
+                            input
+                        );
+                    }
+                );
+
+                dom
+                    .departmentPaymentTypesOptions
+                    .appendChild(
+                        row
+                    );
+            }
+        );
+
+    if (
+        optionState.departments.length ===
+        0
+    ) {
+        dom.departmentPaymentTypesOptions
+            .innerHTML =
+            '<p class="department-options-empty">No Departments are configured.</p>';
+    }
+}
+
+
 function renderOptions() {
+    if (
+        dom.departmentsEnabledOption
+    ) {
+        dom.departmentsEnabledOption.checked =
+            optionState
+                .departmentsEnabled;
+
+        dom.departmentsEnabledOption.disabled =
+            saveInProgress ||
+            refreshInProgress ||
+            !navigator.onLine;
+    }
+
+    if (
+        dom.departmentsEnabledOptionLabel
+    ) {
+        dom.departmentsEnabledOptionLabel
+            .textContent =
+            optionState
+                .departmentsEnabled
+                    ? "On"
+                    : "Off";
+    }
+
     if (dom.paymentTypesOption) {
         dom.paymentTypesOption.checked =
             optionState
@@ -107,6 +371,42 @@ function renderOptions() {
                     ? "On"
                     : "Off";
     }
+
+    if (
+        dom.checkoutOptionsScopeBadge
+    ) {
+        dom.checkoutOptionsScopeBadge
+            .textContent =
+            optionState
+                .departmentsEnabled
+                    ? "Per Department"
+                    : "Global";
+    }
+
+    if (
+        dom.globalPaymentTypesOptionRow
+    ) {
+        dom.globalPaymentTypesOptionRow
+            .hidden =
+            optionState
+                .departmentsEnabled;
+    }
+
+    if (
+        dom.departmentPaymentTypesOptions
+    ) {
+        dom.departmentPaymentTypesOptions
+            .hidden =
+            !optionState
+                .departmentsEnabled;
+    }
+
+    if (
+        optionState
+            .departmentsEnabled
+    ) {
+        renderDepartmentPaymentRows();
+    }
 }
 
 
@@ -116,7 +416,7 @@ async function settingsRequest(
 ) {
     if (!navigator.onLine) {
         throw new Error(
-            "Options can only be changed while online."
+            "Options requires an internet connection."
         );
     }
 
@@ -158,14 +458,82 @@ async function settingsRequest(
 }
 
 
-function applyCloudRows(rows) {
-    const settings =
-        Array.isArray(rows)
-            ? rows
-            : [];
+async function rpcSettings(
+    scopeType,
+    scopeId = null
+) {
+    const response =
+        await settingsRequest(
+            "rpc/get_app_settings",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    "Accept":
+                        "application/json"
+                },
+                body:
+                    JSON.stringify({
+                        p_scope_type:
+                            scopeType,
+                        p_scope_id:
+                            scopeId
+                    })
+            }
+        );
+
+    return response.json();
+}
+
+
+async function fetchDepartmentsForOptions() {
+    const includeDisabled =
+        canManageOptions();
+
+    const response =
+        await settingsRequest(
+            "rpc/get_departments",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    "Accept":
+                        "application/json"
+                },
+                body:
+                    JSON.stringify({
+                        p_include_disabled:
+                            includeDisabled
+                    })
+            }
+        );
+
+    const rows =
+        await response.json();
+
+    return Array.isArray(rows)
+        ? rows.map(
+            normaliseDepartment
+        )
+        : [];
+}
+
+
+function applyGlobalRows(rows) {
+    const departmentsSetting =
+        rows.find(
+            function (setting) {
+                return (
+                    setting.setting_key ===
+                    "departments_enabled"
+                );
+            }
+        );
 
     const paymentSetting =
-        settings.find(
+        rows.find(
             function (setting) {
                 return (
                     setting.setting_key ===
@@ -174,30 +542,73 @@ function applyCloudRows(rows) {
             }
         );
 
+    if (departmentsSetting) {
+        optionState
+            .departmentsEnabled =
+            departmentsSetting.value ===
+            true;
+    }
+
     if (paymentSetting) {
         optionState
             .paymentTypesEnabled =
-            paymentSetting.value === true;
+            paymentSetting.value ===
+            true;
     }
+}
 
-    optionState.loadedFromCloud =
-        true;
 
-    writeCachedOptions();
-    renderOptions();
+async function loadDepartmentPaymentSettings(
+    departments
+) {
+    const result = {};
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "options-changed",
-            {
-                detail: {
-                    paymentTypesEnabled:
-                        optionState
-                            .paymentTypesEnabled
+    await Promise.all(
+        departments.map(
+            async function (
+                department
+            ) {
+                try {
+                    const rows =
+                        await rpcSettings(
+                            "department",
+                            String(
+                                department.id
+                            )
+                        );
+
+                    const setting =
+                        rows.find(
+                            function (row) {
+                                return (
+                                    row.setting_key ===
+                                    "payment_types_enabled"
+                                );
+                            }
+                        );
+
+                    if (setting) {
+                        result[
+                            String(
+                                department.id
+                            )
+                        ] =
+                            setting.value ===
+                            true;
+                    }
+                } catch (error) {
+                    console.warn(
+                        `Department option could not be loaded for ${department.name}:`,
+                        error
+                    );
                 }
             }
         )
     );
+
+    optionState
+        .departmentPaymentTypes =
+        result;
 }
 
 
@@ -243,31 +654,45 @@ export async function refreshOptionsFromCloud(
     }
 
     try {
-        const response =
-            await settingsRequest(
-                "rpc/get_app_settings",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                        "Accept":
-                            "application/json"
-                    },
-                    body:
-                        JSON.stringify({
-                            p_scope_type:
-                                "global",
-                            p_scope_id:
-                                null
-                        })
-                }
+        const globalRows =
+            await rpcSettings(
+                "global",
+                null
             );
 
-        const rows =
-            await response.json();
+        applyGlobalRows(
+            globalRows
+        );
 
-        applyCloudRows(rows);
+        const departments =
+            await fetchDepartmentsForOptions();
+
+        optionState.departments =
+            departments;
+
+        await loadDepartmentPaymentSettings(
+            departments
+        );
+
+        optionState.loadedFromCloud =
+            true;
+
+        writeCachedOptions();
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "options-changed",
+                {
+                    detail: {
+                        departmentsEnabled:
+                            optionState
+                                .departmentsEnabled,
+                        paymentTypesEnabled:
+                            isPaymentTypesEnabled()
+                    }
+                }
+            )
+        );
 
         if (!silent) {
             setOptionsStatus(
@@ -282,8 +707,6 @@ export async function refreshOptionsFromCloud(
             "Options could not be loaded:",
             error
         );
-
-        renderOptions();
 
         if (!silent) {
             setOptionsStatus(
@@ -305,9 +728,11 @@ export async function refreshOptionsFromCloud(
 }
 
 
-async function setGlobalOption(
+async function setOption(
     settingKey,
-    value
+    value,
+    scopeType,
+    scopeId
 ) {
     if (!canManageOptions()) {
         throw new Error(
@@ -333,14 +758,127 @@ async function setGlobalOption(
                         p_value:
                             value,
                         p_scope_type:
-                            "global",
+                            scopeType,
                         p_scope_id:
-                            null
+                            scopeId
                     })
             }
         );
 
     return response.json();
+}
+
+
+async function setGlobalOption(
+    settingKey,
+    value
+) {
+    return setOption(
+        settingKey,
+        value,
+        "global",
+        null
+    );
+}
+
+
+async function changeDepartmentsEnabled() {
+    if (
+        !dom.departmentsEnabledOption
+    ) {
+        return;
+    }
+
+    const requestedValue =
+        dom.departmentsEnabledOption
+            .checked;
+
+    const previousValue =
+        optionState
+            .departmentsEnabled;
+
+    if (!navigator.onLine) {
+        dom.departmentsEnabledOption.checked =
+            previousValue;
+
+        renderOptions();
+
+        setOptionsStatus(
+            "Options cannot be changed while offline.",
+            true
+        );
+
+        return;
+    }
+
+    saveInProgress = true;
+    renderOptions();
+
+    try {
+        const result =
+            await setGlobalOption(
+                "departments_enabled",
+                requestedValue
+            );
+
+        optionState
+            .departmentsEnabled =
+            result?.value === true;
+
+        /*
+         * When Departments is first switched on, a Department with no
+         * explicit Payment Types setting inherits the current global value.
+         * We do not need to manufacture rows simply to preserve behaviour.
+         */
+        writeCachedOptions();
+        renderOptions();
+
+        setOptionsStatus(
+            optionState
+                .departmentsEnabled
+                ? "Departments is on. Checkout Options are now set per Department."
+                : "Departments is off. Checkout Options use the single global Merchandise setting."
+        );
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "options-changed",
+                {
+                    detail: {
+                        departmentsEnabled:
+                            optionState
+                                .departmentsEnabled,
+                        paymentTypesEnabled:
+                            isPaymentTypesEnabled()
+                    }
+                }
+            )
+        );
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "audit-log-updated"
+            )
+        );
+
+    } catch (error) {
+        optionState
+            .departmentsEnabled =
+            previousValue;
+
+        writeCachedOptions();
+
+        setOptionsStatus(
+            error instanceof Error
+                ? error.message
+                : String(error),
+            true
+        );
+
+    } finally {
+        saveInProgress = false;
+        renderOptions();
+    }
 }
 
 
@@ -375,12 +913,6 @@ async function changePaymentTypes() {
     saveInProgress = true;
     renderOptions();
 
-    setOptionsStatus(
-        requestedValue
-            ? "Turning Payment Types on…"
-            : "Turning Payment Types off…"
-    );
-
     try {
         const result =
             await setGlobalOption(
@@ -392,11 +924,7 @@ async function changePaymentTypes() {
             .paymentTypesEnabled =
             result?.value === true;
 
-        optionState.loadedFromCloud =
-            true;
-
         writeCachedOptions();
-        renderOptions();
 
         setOptionsStatus(
             optionState
@@ -410,9 +938,11 @@ async function changePaymentTypes() {
                 "options-changed",
                 {
                     detail: {
-                        paymentTypesEnabled:
+                        departmentsEnabled:
                             optionState
-                                .paymentTypesEnabled
+                                .departmentsEnabled,
+                        paymentTypesEnabled:
+                            isPaymentTypesEnabled()
                     }
                 }
             )
@@ -430,7 +960,95 @@ async function changePaymentTypes() {
             previousValue;
 
         writeCachedOptions();
+
+        setOptionsStatus(
+            error instanceof Error
+                ? error.message
+                : String(error),
+            true
+        );
+
+    } finally {
+        saveInProgress = false;
         renderOptions();
+    }
+}
+
+
+async function changeDepartmentPaymentTypes(
+    department,
+    input
+) {
+    const key =
+        String(
+            department.id
+        );
+
+    const requestedValue =
+        input.checked;
+
+    const previousValue =
+        paymentEnabledForDepartment(
+            department.id
+        );
+
+    if (!navigator.onLine) {
+        input.checked =
+            previousValue;
+        renderOptions();
+        return;
+    }
+
+    saveInProgress = true;
+    renderOptions();
+
+    try {
+        const result =
+            await setOption(
+                "payment_types_enabled",
+                requestedValue,
+                "department",
+                key
+            );
+
+        optionState
+            .departmentPaymentTypes[
+                key
+            ] =
+            result?.value === true;
+
+        writeCachedOptions();
+
+        setOptionsStatus(
+            `Payment Types for ${department.name} is ${requestedValue ? "on" : "off"}.`
+        );
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "options-changed",
+                {
+                    detail: {
+                        departmentsEnabled:
+                            optionState
+                                .departmentsEnabled,
+                        departmentId:
+                            department.id,
+                        paymentTypesEnabled:
+                            isPaymentTypesEnabled()
+                    }
+                }
+            )
+        );
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "audit-log-updated"
+            )
+        );
+
+    } catch (error) {
+        input.checked =
+            previousValue;
 
         setOptionsStatus(
             error instanceof Error
@@ -480,9 +1098,24 @@ function stopVisibleRefresh() {
 }
 
 
-export function isPaymentTypesEnabled() {
+export function isDepartmentsEnabled() {
     return optionState
-        .paymentTypesEnabled;
+        .departmentsEnabled;
+}
+
+
+export function isPaymentTypesEnabled() {
+    if (
+        !optionState
+            .departmentsEnabled
+    ) {
+        return optionState
+            .paymentTypesEnabled;
+    }
+
+    return paymentEnabledForDepartment(
+        currentDepartmentId()
+    );
 }
 
 
@@ -490,24 +1123,26 @@ export function initialiseOptions() {
     readCachedOptions();
     renderOptions();
 
-    if (dom.paymentTypesOption) {
-        dom.paymentTypesOption
-            .addEventListener(
-                "change",
-                changePaymentTypes
-            );
-    }
+    dom.departmentsEnabledOption
+        ?.addEventListener(
+            "change",
+            changeDepartmentsEnabled
+        );
 
-    if (dom.optionsNavButton) {
-        dom.optionsNavButton
-            .addEventListener(
-                "click",
-                function () {
-                    refreshOptionsFromCloud();
-                    startVisibleRefresh();
-                }
-            );
-    }
+    dom.paymentTypesOption
+        ?.addEventListener(
+            "change",
+            changePaymentTypes
+        );
+
+    dom.optionsNavButton
+        ?.addEventListener(
+            "click",
+            function () {
+                refreshOptionsFromCloud();
+                startVisibleRefresh();
+            }
+        );
 
     window.addEventListener(
         "offline",
@@ -529,11 +1164,15 @@ export function initialiseOptions() {
     window.addEventListener(
         "online",
         function () {
+            refreshOptionsFromCloud({
+                silent: true
+            });
+
             if (
                 dom.optionsSection &&
                 !dom.optionsSection.hidden
             ) {
-                refreshOptionsFromCloud();
+                startVisibleRefresh();
             }
         }
     );
@@ -543,10 +1182,39 @@ export function initialiseOptions() {
         renderOptions
     );
 
-    /*
-     * Stop the Options-specific polling when navigating away. The global
-     * cloud-sync system remains untouched.
-     */
+    document.addEventListener(
+        "department-context-changed",
+        function () {
+            document.dispatchEvent(
+                new CustomEvent(
+                    "options-changed",
+                    {
+                        detail: {
+                            departmentsEnabled:
+                                optionState
+                                    .departmentsEnabled,
+                            paymentTypesEnabled:
+                                isPaymentTypesEnabled()
+                        }
+                    }
+                )
+            );
+        }
+    );
+
+    document.addEventListener(
+        "departments-changed",
+        function () {
+            if (
+                navigator.onLine
+            ) {
+                refreshOptionsFromCloud({
+                    silent: true
+                });
+            }
+        }
+    );
+
     document
         .querySelectorAll(
             ".nav-button"

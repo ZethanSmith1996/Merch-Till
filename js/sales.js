@@ -1,4 +1,5 @@
 import { state } from "./state.js";
+import { getCurrentDepartment } from "./department-context.js?v=stage15f2";
 
 function getLocalDateParts(date) {
     const year = date.getFullYear();
@@ -39,6 +40,12 @@ export function createSaleRecord({
 
     return {
         sessionId: state.currentSession.id,
+        departmentId:
+            Number(
+                state.currentSession.departmentId ||
+                getCurrentDepartment()?.id ||
+                1
+            ),
         orderNumber: state.currentOrderNumber,
         date: getLocalDateParts(now),
         time: now.toLocaleTimeString("en-GB", {

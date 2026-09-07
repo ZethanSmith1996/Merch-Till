@@ -61,8 +61,18 @@ export function canManageUsers() {
 }
 
 
+export function canManageDepartments() {
+    return isMasterAdmin();
+}
+
+
 export function canManageOptions() {
-    return canManageSessions();
+    /*
+     * Stage 15 rule:
+     * Options is deliberately Master-only so operational users cannot
+     * accidentally change global or Department configuration.
+     */
+    return isMasterAdmin();
 }
 
 
@@ -102,6 +112,9 @@ export function canAccessScreen(screenId) {
 
         case "archive-section":
             return canManageArchive();
+
+        case "departments-section":
+            return canManageDepartments();
 
         case "options-section":
             return canManageOptions();
