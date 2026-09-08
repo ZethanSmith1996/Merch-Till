@@ -24,6 +24,12 @@ const expandedTransactionIds = new Set();
 const expandedProductLists = new Set();
 const expandedTransactionLists = new Set();
 
+let comparisonSelectedProductionIds = new Set();
+let comparisonRunning = false;
+let comparisonMetricsCache = [];
+let comparisonGraphMode = "daily";
+let comparisonGraphMetric = "revenue";
+
 
 function setArchiveStatus(
     message,
@@ -1784,6 +1790,1004 @@ function renderProductionList(rows) {
 }
 
 
+
+function productionComparisonChoices() {
+    /*
+     * Comparison is most useful once a Production has actually traded,
+     * but we do not artificially hide current/finished Productions that
+     * have zero transactions. Upcoming Productions with no sessions are
+     * excluded because there is nothing historical to compare yet.
+     */
+    return productions.filter(
+        function (production) {
+            return (
+                production.sessionCount > 0 ||
+                production.status !== "upcoming"
+            );
+        }
+    );
+}
+
+
+function selectedComparisonProductions() {
+    return Array.from(
+        comparisonSelectedProductionIds
+    )
+        .map(
+            function (id) {
+                return productions.find(
+                    function (production) {
+                        return (
+                            Number(production.id) ===
+                            Number(id)
+                        );
+                    }
+                );
+            }
+        )
+        .filter(Boolean);
+}
+
+
+function updateComparisonSelectionState() {
+    const count =
+        comparisonSelectedProductionIds
+            .size;
+
+    if (
+        dom.productionComparisonSelectionStatus
+    ) {
+        dom.productionComparisonSelectionStatus
+            .textContent =
+            count === 0
+                ? "Select at least 2 Productions."
+                : count === 1
+                    ? "1 selected — choose at least one more."
+                    : `${count} selected.`;
+    }
+
+    if (
+        dom.runProductionComparisonButton
+    ) {
+        dom.runProductionComparisonButton.disabled =
+            comparisonRunning ||
+            count < 2 ||
+            count > 3;
+    }
+
+    dom.productionComparisonSelection
+        ?.querySelectorAll(
+            "input[data-comparison-production-id]"
+        )
+        .forEach(
+            function (input) {
+                const checked =
+                    input.checked;
+
+                input.disabled =
+                    !checked &&
+                    count >= 3;
+            }
+        );
+}
+
+
+function renderComparisonSelection() {
+    if (
+        !dom.productionComparisonSelection
+    ) {
+        return;
+    }
+
+    const choices =
+        productionComparisonChoices();
+
+    if (choices.length === 0) {
+        dom.productionComparisonSelection.innerHTML =
+            '<div class="archive-empty-message production-comparison-empty">No Productions with trading history are available to compare.</div>';
+
+        updateComparisonSelectionState();
+        return;
+    }
+
+    dom.productionComparisonSelection.innerHTML =
+        choices
+            .slice()
+            .sort(
+                function (a, b) {
+                    return (
+                        String(b.startDate)
+                            .localeCompare(
+                                String(a.startDate)
+                            )
+                    );
+                }
+            )
+            .map(
+                function (production) {
+                    const selected =
+                        comparisonSelectedProductionIds
+                            .has(
+                                Number(
+                                    production.id
+                                )
+                            );
+
+                    return `
+                        <label class="production-comparison-choice">
+                            <input
+                                type="checkbox"
+                                data-comparison-production-id="${production.id}"
+                                ${selected ? "checked" : ""}
+                            >
+
+                            <span>
+                                <strong>
+                                    ${escapeHTML(production.name)}
+                                </strong>
+
+                                <small>
+                                    ${escapeHTML(
+                                        displayArchiveDateOnly(
+                                            production.startDate
+                                        )
+                                    )}
+                                    –
+                                    ${escapeHTML(
+                                        displayArchiveDateOnly(
+                                            new Date(
+                                                new Date(
+                                                    `${production.autoCloseDate}T12:00:00`
+                                                ).getTime() -
+                                                86400000
+                                            )
+                                        )
+                                    )}
+                                    ·
+                                    ${escapeHTML(
+                                        statusLabel(
+                                            production.status
+                                        )
+                                    )}
+                                </small>
+                            </span>
+                        </label>
+                    `;
+                }
+            )
+            .join("");
+
+    dom.productionComparisonSelection
+        .querySelectorAll(
+            "input[data-comparison-production-id]"
+        )
+        .forEach(
+            function (input) {
+                input.addEventListener(
+                    "change",
+                    function () {
+                        const id =
+                            Number(
+                                input.dataset
+                                    .comparisonProductionId
+                            );
+
+                        if (input.checked) {
+                            comparisonSelectedProductionIds
+                                .add(id);
+                        } else {
+                            comparisonSelectedProductionIds
+                                .delete(id);
+                        }
+
+                        updateComparisonSelectionState();
+                    }
+                );
+            }
+        );
+
+    updateComparisonSelectionState();
+}
+
+
+function openProductionComparisonModal() {
+    comparisonSelectedProductionIds =
+        new Set();
+
+    comparisonRunning =
+        false;
+
+    dom.productionComparisonError.textContent =
+        "";
+
+    dom.productionComparisonResults.hidden =
+        true;
+
+    dom.productionComparisonResults.innerHTML =
+        "";
+
+    renderComparisonSelection();
+
+    dom.productionComparisonModal.hidden =
+        false;
+}
+
+
+function closeProductionComparisonModal() {
+    if (
+        !dom.productionComparisonModal
+    ) {
+        return;
+    }
+
+    dom.productionComparisonModal.hidden =
+        true;
+
+    comparisonSelectedProductionIds =
+        new Set();
+
+    comparisonRunning =
+        false;
+
+    dom.productionComparisonError.textContent =
+        "";
+
+    dom.productionComparisonResults.hidden =
+        true;
+
+    dom.productionComparisonResults.innerHTML =
+        "";
+}
+
+
+async function comparisonReportData(
+    production
+) {
+    const cached =
+        productionReportCache.get(
+            production.id
+        );
+
+    if (
+        cached &&
+        cached.data
+    ) {
+        return cached.data;
+    }
+
+    const response =
+        await archiveRequest(
+            "rpc/get_production_report_data",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    "Accept":
+                        "application/json"
+                },
+                body:
+                    JSON.stringify({
+                        p_production_id:
+                            production.id
+                    })
+            }
+        );
+
+    const result =
+        await response.json();
+
+    const data = {
+        sessions:
+            Array.isArray(
+                result.sessions
+            )
+                ? result.sessions.map(
+                    normaliseReportSession
+                )
+                : [],
+        sales:
+            Array.isArray(
+                result.sales
+            )
+                ? result.sales.map(
+                    normaliseReportSale
+                )
+                : []
+    };
+
+    productionReportCache.set(
+        production.id,
+        {
+            data
+        }
+    );
+
+    return data;
+}
+
+
+function comparisonMetrics(
+    production,
+    reportData
+) {
+    const activeSales =
+        reportData.sales.filter(
+            function (sale) {
+                return !sale.voided;
+            }
+        );
+
+    const totalRevenue =
+        activeSales.reduce(
+            function (sum, sale) {
+                return (
+                    sum +
+                    Number(
+                        sale.total || 0
+                    )
+                );
+            },
+            0
+        );
+
+    const productsSold =
+        activeSales.reduce(
+            function (sum, sale) {
+                return (
+                    sum +
+                    Number(
+                        sale.itemCount || 0
+                    )
+                );
+            },
+            0
+        );
+
+    const runningDays =
+        new Set(
+            reportData.sessions
+                .map(
+                    function (session) {
+                        return session.openedAt
+                            ? String(
+                                session.openedAt
+                            ).slice(0, 10)
+                            : "";
+                    }
+                )
+                .filter(Boolean)
+        ).size;
+
+    const productTotals =
+        reportProductsSold(
+            activeSales
+        );
+
+    const bestProduct =
+        productTotals.length > 0
+            ? {
+                name:
+                    productTotals[0][0],
+                quantity:
+                    productTotals[0][1]
+            }
+            : null;
+
+    return {
+        production,
+        reportData,
+        totalRevenue,
+        runningDays,
+        transactions:
+            activeSales.length,
+        productsSold,
+        bestProduct
+    };
+}
+
+
+function comparisonMetricRow(
+    label,
+    metrics,
+    formatter
+) {
+    return `
+        <tr>
+            <th scope="row">
+                ${escapeHTML(label)}
+            </th>
+
+            ${
+                metrics.map(
+                    function (metric) {
+                        return `
+                            <td>
+                                ${formatter(metric)}
+                            </td>
+                        `;
+                    }
+                ).join("")
+            }
+        </tr>
+    `;
+}
+
+
+
+function comparisonMetricValue(metric, key) {
+    if (key === "transactions") return Number(metric.transactions || 0);
+    if (key === "products") return Number(metric.productsSold || 0);
+    return Number(metric.totalRevenue || 0);
+}
+
+function comparisonMetricLabel(key) {
+    if (key === "transactions") return "Transactions";
+    if (key === "products") return "Products Sold";
+    return "Revenue";
+}
+
+function comparisonMetricFormat(value, key) {
+    return key === "revenue"
+        ? currencyFormatter.format(Number(value || 0))
+        : String(Math.round(Number(value || 0)));
+}
+
+function localDateKey(value) {
+    return value ? String(value).slice(0, 10) : "";
+}
+
+function mondayStartDate(date) {
+    const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const day = result.getDay();
+    result.setDate(result.getDate() + (day === 0 ? -6 : 1 - day));
+    return result;
+}
+
+function wholeDaysBetween(start, end) {
+    const oneDay = 86400000;
+    return Math.round(
+        (Date.UTC(end.getFullYear(), end.getMonth(), end.getDate()) -
+         Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())) / oneDay
+    );
+}
+
+function buildDailyComparisonSeries(metric) {
+    const prepared = comparisonMetricsCache.map(function (entry) {
+        const sessionDates = Array.from(new Set(
+            entry.reportData.sessions
+                .map(function (session) { return localDateKey(session.openedAt); })
+                .filter(Boolean)
+        )).sort();
+
+        if (sessionDates.length === 0) {
+            return {
+                production: entry.production,
+                valuesBySlot: new Map(),
+                runningSlots: new Set(),
+                maxSlot: 0
+            };
+        }
+
+        const firstDate = new Date(`${sessionDates[0]}T12:00:00`);
+        const firstMonday = mondayStartDate(firstDate);
+        const runningSlots = new Set();
+        const valuesBySlot = new Map();
+
+        const salesByDate = new Map();
+
+        entry.reportData.sales
+            .filter(function (sale) { return !sale.voided; })
+            .forEach(function (sale) {
+                const dateKey = localDateKey(sale.saleDate || sale.createdAt);
+                if (!dateKey) return;
+
+                const current = salesByDate.get(dateKey) || {
+                    revenue: 0,
+                    transactions: 0,
+                    products: 0
+                };
+
+                current.revenue += Number(sale.total || 0);
+                current.transactions += 1;
+                current.products += Number(sale.itemCount || 0);
+                salesByDate.set(dateKey, current);
+            });
+
+        sessionDates.forEach(function (dateKey) {
+            const date = new Date(`${dateKey}T12:00:00`);
+            const slot = wholeDaysBetween(firstMonday, date);
+            const totals = salesByDate.get(dateKey) || {
+                revenue: 0,
+                transactions: 0,
+                products: 0
+            };
+
+            runningSlots.add(slot);
+            valuesBySlot.set(slot, Number(totals[metric] || 0));
+        });
+
+        return {
+            production: entry.production,
+            valuesBySlot,
+            runningSlots,
+            maxSlot: Math.max(...runningSlots)
+        };
+    });
+
+    const maxSlot = Math.max(0, ...prepared.map(function (item) { return item.maxSlot; }));
+    const weekdays = [
+        "Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"
+    ];
+
+    const labels = [];
+    for (let slot = 0; slot <= maxSlot; slot += 1) {
+        labels.push({
+            weekday: weekdays[slot % 7],
+            week: Math.floor(slot / 7) + 1
+        });
+    }
+
+    return {
+        labels,
+        series: prepared.map(function (item) {
+            return {
+                name: item.production.name,
+                values: labels.map(function (_, slot) {
+                    return item.runningSlots.has(slot)
+                        ? Number(item.valuesBySlot.get(slot) || 0)
+                        : null;
+                })
+            };
+        })
+    };
+}
+
+function chartPalette() {
+    return ["#4f46e5", "#0f766e", "#c2410c"];
+}
+
+function renderLineChart(metric) {
+    const data = buildDailyComparisonSeries(metric);
+    if (data.labels.length === 0) {
+        return '<div class="archive-empty-message">No daily Production data is available.</div>';
+    }
+
+    const width = 980, height = 470, left = 82, right = 28, top = 34, bottom = 92;
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const values = data.series.flatMap(s => s.values).filter(v => v !== null);
+    const maxValue = Math.max(1, ...values);
+    const colours = chartPalette();
+
+    const x = i => data.labels.length === 1
+        ? left + plotWidth / 2
+        : left + (i / (data.labels.length - 1)) * plotWidth;
+    const y = v => top + plotHeight - (Number(v) / maxValue) * plotHeight;
+
+    let svg = `<svg class="production-comparison-chart" viewBox="0 0 ${width} ${height}" role="img">`;
+
+    for (let tick = 0; tick <= 5; tick += 1) {
+        const value = (maxValue / 5) * tick;
+        const yy = y(value);
+        svg += `
+            <line x1="${left}" y1="${yy}" x2="${width-right}" y2="${yy}" class="production-chart-gridline"></line>
+            <text x="${left-12}" y="${yy+4}" text-anchor="end" class="production-chart-axis-label">
+                ${escapeHTML(comparisonMetricFormat(value, metric))}
+            </text>
+        `;
+    }
+
+    data.labels.forEach(function (label, index) {
+        const xx = x(index);
+
+        if (index > 0 && index % 7 === 0) {
+            const step = plotWidth / Math.max(data.labels.length - 1, 1);
+            svg += `<line x1="${xx-step/2}" y1="${top}" x2="${xx-step/2}" y2="${top+plotHeight}" class="production-chart-week-divider"></line>`;
+        }
+
+        svg += `
+            <text x="${xx}" y="${top+plotHeight+28}" text-anchor="middle" class="production-chart-x-label">
+                ${escapeHTML(label.weekday)}
+            </text>
+        `;
+
+        if (data.labels.length > 7) {
+            svg += `
+                <text x="${xx}" y="${top+plotHeight+46}" text-anchor="middle" class="production-chart-week-label">
+                    Week ${label.week}
+                </text>
+            `;
+        }
+    });
+
+    data.series.forEach(function (series, seriesIndex) {
+        let segment = [];
+
+        function flush() {
+            if (segment.length > 1) {
+                svg += `<polyline points="${segment.map(p => `${p.x},${p.y}`).join(" ")}"
+                    fill="none" stroke="${colours[seriesIndex % colours.length]}"
+                    stroke-width="4" stroke-linejoin="round" stroke-linecap="round"></polyline>`;
+            }
+
+            segment.forEach(function (point) {
+                const label = data.labels[point.index];
+                svg += `
+                    <circle cx="${point.x}" cy="${point.y}" r="5"
+                        fill="${colours[seriesIndex % colours.length]}">
+                        <title>${escapeHTML(series.name)} — ${escapeHTML(label.weekday)}, Week ${label.week}: ${escapeHTML(comparisonMetricFormat(point.value, metric))}</title>
+                    </circle>
+                `;
+            });
+
+            segment = [];
+        }
+
+        series.values.forEach(function (value, index) {
+            if (value === null) {
+                flush();
+                return;
+            }
+            segment.push({index, value, x: x(index), y: y(value)});
+        });
+        flush();
+    });
+
+    svg += `</svg>
+        <div class="production-chart-legend">
+            ${data.series.map(function (series, index) {
+                return `<span><i style="background:${colours[index % colours.length]}"></i>${escapeHTML(series.name)}</span>`;
+            }).join("")}
+        </div>`;
+
+    return svg;
+}
+
+function renderBarChart(metric) {
+    const values = comparisonMetricsCache.map(function (entry) {
+        return {
+            name: entry.production.name,
+            value: comparisonMetricValue(entry, metric)
+        };
+    });
+
+    const width = 900, height = 430, left = 90, right = 40, top = 42, bottom = 86;
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const maxValue = Math.max(1, ...values.map(v => v.value));
+    const groupWidth = plotWidth / Math.max(values.length, 1);
+    const barWidth = Math.min(150, groupWidth * .55);
+    const colours = chartPalette();
+
+    let svg = `<svg class="production-comparison-chart" viewBox="0 0 ${width} ${height}" role="img">`;
+
+    for (let tick = 0; tick <= 5; tick += 1) {
+        const value = (maxValue / 5) * tick;
+        const yy = top + plotHeight - (value / maxValue) * plotHeight;
+        svg += `
+            <line x1="${left}" y1="${yy}" x2="${width-right}" y2="${yy}" class="production-chart-gridline"></line>
+            <text x="${left-12}" y="${yy+4}" text-anchor="end" class="production-chart-axis-label">
+                ${escapeHTML(comparisonMetricFormat(value, metric))}
+            </text>
+        `;
+    }
+
+    values.forEach(function (entry, index) {
+        const xx = left + groupWidth * index + (groupWidth - barWidth) / 2;
+        const barHeight = (entry.value / maxValue) * plotHeight;
+        const yy = top + plotHeight - barHeight;
+
+        svg += `
+            <rect x="${xx}" y="${yy}" width="${barWidth}" height="${barHeight}" rx="7"
+                fill="${colours[index % colours.length]}">
+                <title>${escapeHTML(entry.name)}: ${escapeHTML(comparisonMetricFormat(entry.value, metric))}</title>
+            </rect>
+
+            <text x="${xx+barWidth/2}" y="${Math.max(yy-10,18)}" text-anchor="middle" class="production-chart-value-label">
+                ${escapeHTML(comparisonMetricFormat(entry.value, metric))}
+            </text>
+
+            <text x="${xx+barWidth/2}" y="${top+plotHeight+30}" text-anchor="middle" class="production-chart-x-label">
+                ${escapeHTML(entry.name)}
+            </text>
+        `;
+    });
+
+    return svg + "</svg>";
+}
+
+function renderComparisonGraph() {
+    const container = document.getElementById("production-comparison-chart-container");
+    if (!container) return;
+
+    container.innerHTML = comparisonGraphMode === "overall"
+        ? renderBarChart(comparisonGraphMetric)
+        : renderLineChart(comparisonGraphMetric);
+}
+
+function initialiseComparisonGraphControls() {
+    const toggle =
+        document.getElementById(
+            "toggle-production-comparison-graph"
+        );
+
+    const panel =
+        document.getElementById(
+            "production-comparison-graph-panel"
+        );
+
+    const graphType =
+        document.getElementById(
+            "production-comparison-graph-type"
+        );
+
+    const metric =
+        document.getElementById(
+            "production-comparison-graph-metric"
+        );
+
+    toggle
+        ?.addEventListener(
+            "click",
+            function () {
+                const willOpen =
+                    panel.hidden;
+
+                panel.hidden =
+                    !willOpen;
+
+                toggle.setAttribute(
+                    "aria-expanded",
+                    willOpen
+                        ? "true"
+                        : "false"
+                );
+
+                toggle.firstChild.textContent =
+                    willOpen
+                        ? "Hide Graph "
+                        : "View as Graph ";
+
+                const arrow =
+                    toggle.querySelector(
+                        ".production-comparison-graph-toggle-arrow"
+                    );
+
+                if (arrow) {
+                    arrow.textContent =
+                        willOpen
+                            ? "▴"
+                            : "▾";
+                }
+
+                if (willOpen) {
+                    renderComparisonGraph();
+                }
+            }
+        );
+
+    graphType
+        ?.addEventListener(
+            "change",
+            function () {
+                comparisonGraphMode =
+                    graphType.value;
+
+                if (
+                    panel &&
+                    !panel.hidden
+                ) {
+                    renderComparisonGraph();
+                }
+            }
+        );
+
+    metric
+        ?.addEventListener(
+            "change",
+            function () {
+                comparisonGraphMetric =
+                    metric.value;
+
+                if (
+                    panel &&
+                    !panel.hidden
+                ) {
+                    renderComparisonGraph();
+                }
+            }
+        );
+}
+
+
+function renderComparisonResults(metrics) {
+    if (!dom.productionComparisonResults) return;
+
+    comparisonMetricsCache = metrics;
+    dom.productionComparisonResults.hidden = false;
+
+    dom.productionComparisonResults.innerHTML = `
+        <div class="production-comparison-results-heading">
+            <div>
+                <h3>Comparison</h3>
+                <p>Historical totals for the selected Merchandise Productions.</p>
+            </div>
+        </div>
+
+        <div class="production-comparison-table-wrap">
+            <table class="production-comparison-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        ${metrics.map(metric => `<th>${escapeHTML(metric.production.name)}</th>`).join("")}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${comparisonMetricRow("Total Revenue", metrics, metric => `<strong>${currencyFormatter.format(metric.totalRevenue)}</strong>`)}
+                    ${comparisonMetricRow("Running Days", metrics, metric => `<strong>${metric.runningDays}</strong>`)}
+                    ${comparisonMetricRow("Total Transactions", metrics, metric => `<strong>${metric.transactions}</strong>`)}
+                    ${comparisonMetricRow("Products Sold", metrics, metric => `<strong>${metric.productsSold}</strong>`)}
+                    ${comparisonMetricRow("Best Sold Product", metrics, metric => {
+                        if (!metric.bestProduct) return "—";
+                        return `<strong>${escapeHTML(metric.bestProduct.name)}</strong>
+                            <small class="production-comparison-product-qty">${metric.bestProduct.quantity} sold</small>`;
+                    })}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="production-comparison-graph-section">
+
+            <button
+                type="button"
+                id="toggle-production-comparison-graph"
+                class="secondary-button production-comparison-graph-toggle"
+                aria-expanded="false"
+            >
+                View as Graph
+                <span
+                    class="production-comparison-graph-toggle-arrow"
+                    aria-hidden="true"
+                >
+                    ▾
+                </span>
+            </button>
+
+            <div
+                id="production-comparison-graph-panel"
+                class="production-comparison-graph-panel"
+                hidden
+            >
+                <div class="production-comparison-graph-heading">
+
+                    <div>
+                        <h3>Graph Comparison</h3>
+
+                        <p>
+                            Compare totals or see performance across the actual weekdays of each Production run.
+                        </p>
+                    </div>
+
+                    <div class="production-comparison-graph-controls">
+
+                        <label>
+                            <span>Graph</span>
+
+                            <select id="production-comparison-graph-type">
+                                <option value="daily">
+                                    Daily Performance
+                                </option>
+
+                                <option value="overall">
+                                    Overall Comparison
+                                </option>
+                            </select>
+                        </label>
+
+                        <label>
+                            <span>Metric</span>
+
+                            <select id="production-comparison-graph-metric">
+                                <option value="revenue">
+                                    Revenue
+                                </option>
+
+                                <option value="transactions">
+                                    Transactions
+                                </option>
+
+                                <option value="products">
+                                    Products Sold
+                                </option>
+                            </select>
+                        </label>
+
+                    </div>
+
+                </div>
+
+                <div
+                    id="production-comparison-chart-container"
+                    class="production-comparison-chart-container"
+                ></div>
+
+            </div>
+
+        </div>
+    `;
+
+    initialiseComparisonGraphControls();
+}
+
+
+async function runProductionComparison() {
+    const selected =
+        selectedComparisonProductions();
+
+    if (
+        selected.length < 2 ||
+        selected.length > 3
+    ) {
+        return;
+    }
+
+    comparisonRunning =
+        true;
+
+    dom.productionComparisonError.textContent =
+        "";
+
+    dom.productionComparisonResults.hidden =
+        false;
+
+    dom.productionComparisonResults.innerHTML =
+        '<div class="archive-report-loading">Loading comparison…</div>';
+
+    updateComparisonSelectionState();
+
+    try {
+        const metrics =
+            await Promise.all(
+                selected.map(
+                    async function (
+                        production
+                    ) {
+                        const data =
+                            await comparisonReportData(
+                                production
+                            );
+
+                        return comparisonMetrics(
+                            production,
+                            data
+                        );
+                    }
+                )
+            );
+
+        renderComparisonResults(
+            metrics
+        );
+
+    } catch (error) {
+        dom.productionComparisonResults.hidden =
+            true;
+
+        dom.productionComparisonError.textContent =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+    } finally {
+        comparisonRunning =
+            false;
+
+        updateComparisonSelectionState();
+    }
+}
+
+
 function actionButton(
     label,
     handler,
@@ -3058,6 +4062,44 @@ export function initialiseArchive() {
             }
         );
 
+    dom.compareProductionsButton
+        ?.addEventListener(
+            "click",
+            openProductionComparisonModal
+        );
+
+    dom.runProductionComparisonButton
+        ?.addEventListener(
+            "click",
+            runProductionComparison
+        );
+
+    dom.closeProductionComparisonModalButton
+        ?.addEventListener(
+            "click",
+            closeProductionComparisonModal
+        );
+
+    dom.cancelProductionComparisonButton
+        ?.addEventListener(
+            "click",
+            closeProductionComparisonModal
+        );
+
+    dom.productionComparisonModal
+        ?.addEventListener(
+            "click",
+            function (event) {
+                if (
+                    event.target ===
+                    dom.productionComparisonModal
+                ) {
+                    closeProductionComparisonModal();
+                }
+            }
+        );
+
+
     dom.addProductionButton
         ?.addEventListener(
             "click",
@@ -3315,6 +4357,14 @@ export function initialiseArchive() {
             if (
                 event.key !== "Escape"
             ) {
+                return;
+            }
+
+            if (
+                dom.productionComparisonModal &&
+                !dom.productionComparisonModal.hidden
+            ) {
+                closeProductionComparisonModal();
                 return;
             }
 

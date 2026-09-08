@@ -51,7 +51,7 @@
         href="icons/icon-192.png"
     >
 
-    <link rel="stylesheet" href="style.css?v=stage15f2">
+    <link rel="stylesheet" href="style.css?v=stage18b1">
 </head>
 
 <body>
@@ -1007,13 +1007,25 @@
                             </p>
                         </div>
 
-                        <button
-                            type="button"
-                            id="add-production-button"
-                            class="add-product-button"
-                        >
-                            + New Production
-                        </button>
+                        <div class="archive-heading-actions">
+
+                            <button
+                                type="button"
+                                id="compare-productions-button"
+                                class="secondary-button"
+                            >
+                                Compare Productions
+                            </button>
+
+                            <button
+                                type="button"
+                                id="add-production-button"
+                                class="add-product-button"
+                            >
+                                + New Production
+                            </button>
+
+                        </div>
 
                     </div>
 
@@ -2070,6 +2082,100 @@
 
 
     <!-- ==================================================
+         Production Comparison popup
+    ================================================== -->
+    <div
+        id="production-comparison-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box production-comparison-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="production-comparison-title"
+        >
+
+            <div class="modal-header">
+
+                <div>
+                    <h2 id="production-comparison-title">
+                        Compare Productions
+                    </h2>
+
+                    <p class="session-assignment-production-label">
+                        Select 2 or 3 Productions to compare side-by-side.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    id="close-production-comparison-modal"
+                    class="modal-close-button"
+                    aria-label="Close Production comparison"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <div
+                id="production-comparison-selection"
+                class="production-comparison-selection"
+            ></div>
+
+
+            <p
+                id="production-comparison-selection-status"
+                class="field-help"
+            >
+                Select at least 2 Productions.
+            </p>
+
+
+            <div class="modal-actions production-comparison-actions">
+
+                <button
+                    type="button"
+                    id="cancel-production-comparison"
+                    class="secondary-button"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="button"
+                    id="run-production-comparison"
+                    class="save-product-button"
+                    disabled
+                >
+                    Compare Selected
+                </button>
+
+            </div>
+
+
+            <div
+                id="production-comparison-results"
+                class="production-comparison-results"
+                hidden
+            ></div>
+
+
+            <p
+                id="production-comparison-error"
+                class="form-error"
+                aria-live="polite"
+            ></p>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
          Manage Production Products popup
     ================================================== -->
     <div
@@ -2778,7 +2884,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=stage16b"></script>
+<script type="module" src="js/app.js?v=stage18b1"></script>
 
 </body>
 </html>

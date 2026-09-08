@@ -3979,3 +3979,333 @@ select:focus {
         flex-basis: auto;
     }
 }
+
+/* ==================================================
+   V18A — Historical Production Comparison
+================================================== */
+
+.archive-heading-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.production-comparison-modal-box {
+    max-width: 980px;
+}
+
+.production-comparison-selection {
+    display: grid;
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 16px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.production-comparison-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--grey-300);
+    border-radius: 10px;
+    background: var(--white);
+    cursor: pointer;
+}
+
+.production-comparison-choice:hover {
+    background: var(--grey-100);
+}
+
+.production-comparison-choice input {
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    flex: 0 0 auto;
+}
+
+.production-comparison-choice strong,
+.production-comparison-choice small {
+    display: block;
+}
+
+.production-comparison-choice small {
+    margin-top: 3px;
+    color: var(--grey-600);
+}
+
+.production-comparison-actions {
+    border-bottom: 1px solid var(--grey-200);
+    padding-bottom: 16px;
+}
+
+.production-comparison-results {
+    margin-top: 18px;
+}
+
+.production-comparison-results[hidden] {
+    display: none;
+}
+
+.production-comparison-results-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.production-comparison-results-heading h3 {
+    margin: 0;
+}
+
+.production-comparison-results-heading p {
+    margin: 4px 0 0;
+    color: var(--grey-600);
+}
+
+.production-comparison-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--grey-300);
+    border-radius: 10px;
+}
+
+.production-comparison-table {
+    width: 100%;
+    min-width: 680px;
+    border-collapse: collapse;
+    background: var(--white);
+}
+
+.production-comparison-table th,
+.production-comparison-table td {
+    padding: 13px 15px;
+    border-bottom: 1px solid var(--grey-200);
+    border-right: 1px solid var(--grey-200);
+    text-align: left;
+    vertical-align: top;
+}
+
+.production-comparison-table th:last-child,
+.production-comparison-table td:last-child {
+    border-right: 0;
+}
+
+.production-comparison-table tbody tr:last-child th,
+.production-comparison-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.production-comparison-table thead th {
+    background: var(--grey-100);
+    color: var(--grey-700);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.production-comparison-table tbody th {
+    width: 180px;
+    background: var(--grey-100);
+    color: var(--grey-700);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.production-comparison-product-qty {
+    display: block;
+    margin-top: 3px;
+    color: var(--grey-600);
+}
+
+.production-comparison-empty {
+    min-height: 120px;
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 700px) {
+    .archive-heading-actions {
+        width: 100%;
+    }
+
+    .archive-heading-actions button {
+        flex: 1 1 180px;
+    }
+
+    .production-comparison-selection {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ==================================================
+   V18B — Production Comparison Graphs
+================================================== */
+
+.production-comparison-graph-panel {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--grey-200);
+}
+
+.production-comparison-graph-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 14px;
+}
+
+.production-comparison-graph-heading h3 { margin: 0; }
+
+.production-comparison-graph-heading p {
+    margin: 4px 0 0;
+    color: var(--grey-600);
+}
+
+.production-comparison-graph-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.production-comparison-graph-controls label {
+    display: grid;
+    gap: 4px;
+    color: var(--grey-700);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.production-comparison-graph-controls select {
+    min-width: 170px;
+    min-height: 40px;
+    padding: 6px 32px 6px 10px;
+    border: 1px solid var(--grey-300);
+    border-radius: 8px;
+    background: var(--white);
+    color: inherit;
+    font: inherit;
+}
+
+.production-comparison-chart-container {
+    overflow-x: auto;
+    padding: 8px 0 2px;
+}
+
+.production-comparison-chart {
+    display: block;
+    width: 100%;
+    min-width: 760px;
+    height: auto;
+}
+
+.production-chart-gridline {
+    stroke: #e5e7eb;
+    stroke-width: 1;
+}
+
+.production-chart-week-divider {
+    stroke: #cbd5e1;
+    stroke-width: 1.5;
+    stroke-dasharray: 5 5;
+}
+
+.production-chart-axis-label,
+.production-chart-week-label {
+    fill: #6b7280;
+    font-size: 11px;
+    font-family: Arial, sans-serif;
+}
+
+.production-chart-x-label {
+    fill: #374151;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: Arial, sans-serif;
+}
+
+.production-chart-value-label {
+    fill: #374151;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: Arial, sans-serif;
+}
+
+.production-chart-legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 5px;
+}
+
+.production-chart-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--grey-700);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.production-chart-legend i {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+    .production-comparison-graph-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .production-comparison-graph-controls {
+        width: 100%;
+    }
+
+    .production-comparison-graph-controls label {
+        flex: 1 1 180px;
+    }
+
+    .production-comparison-graph-controls select {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+
+/* ==================================================
+   V18B.1 — Expandable Graph View
+================================================== */
+
+.production-comparison-graph-section {
+    margin-top: 20px;
+}
+
+.production-comparison-graph-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 170px;
+}
+
+.production-comparison-graph-toggle-arrow {
+    font-size: 13px;
+    line-height: 1;
+}
+
+.production-comparison-graph-panel[hidden] {
+    display: none;
+}
+
+.production-comparison-graph-panel {
+    margin-top: 14px;
+}
