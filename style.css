@@ -4309,3 +4309,115 @@ select:focus {
 .production-comparison-graph-panel {
     margin-top: 14px;
 }
+
+
+/* ==================================================
+   V19.5 — Scrollable / Responsive Modals
+================================================== */
+
+/*
+ * Keep every modal inside the visible screen.
+ * The modal box itself becomes the scroll container when its content is long.
+ */
+.modal-overlay {
+    overflow: hidden;
+}
+
+.modal-box {
+    max-height: calc(100dvh - 40px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+
+/*
+ * Keep the modal title and close button accessible while scrolling.
+ */
+.modal-box > .modal-header {
+    position: sticky;
+    top: -24px;
+    z-index: 20;
+    margin: -24px -24px 22px;
+    padding: 24px 24px 16px;
+    background: var(--white);
+    border-bottom: 1px solid transparent;
+}
+
+
+/*
+ * Keep action buttons reachable at the bottom of long forms.
+ * This applies to Product variants and other long modal forms.
+ */
+.modal-box .modal-actions {
+    position: sticky;
+    bottom: -24px;
+    z-index: 20;
+    margin: 12px -24px -24px;
+    padding: 14px 24px 24px;
+    background: var(--white);
+    border-top: 1px solid var(--grey-200);
+}
+
+
+/*
+ * Forms whose error message sits immediately above the action row retain
+ * comfortable spacing when the footer becomes sticky.
+ */
+.modal-box .form-error + .modal-actions {
+    margin-top: 0;
+}
+
+
+/*
+ * Avoid the page behind a modal becoming the useful scrolling surface on
+ * touch devices.
+ */
+.modal-overlay[hidden] {
+    display: none;
+}
+
+
+@media (max-width: 760px) {
+
+    .modal-overlay {
+        align-items: flex-start;
+        padding: 10px;
+    }
+
+    .modal-box {
+        max-height: calc(100dvh - 20px);
+        padding: 18px;
+        border-radius: 12px;
+    }
+
+    .modal-box > .modal-header {
+        top: -18px;
+        margin: -18px -18px 18px;
+        padding: 18px 18px 14px;
+    }
+
+    .modal-box .modal-actions {
+        bottom: -18px;
+        margin-right: -18px;
+        margin-bottom: -18px;
+        margin-left: -18px;
+        padding: 12px 18px 18px;
+    }
+}
+
+
+/*
+ * Fallback for browsers that do not yet support dynamic viewport units.
+ */
+@supports not (height: 100dvh) {
+    .modal-box {
+        max-height: calc(100vh - 40px);
+    }
+
+    @media (max-width: 760px) {
+        .modal-box {
+            max-height: calc(100vh - 20px);
+        }
+    }
+}
