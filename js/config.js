@@ -1,6 +1,6 @@
 export const supabaseConfig = {
-    url: "https://duadghkvimbgffzzxzfo.supabase.co",
-    publishableKey: "sb_publishable_7ac6iqUKBWuYzWq1HBTEIw_zLGcirwr"
+    url: "https://zdxduhnfjebahfzuqttk.supabase.co",
+    publishableKey: "sb_publishable_ReTBviIlpav9HsnAqcxnSA_l6yHSGhy"
 };
 
 /*
