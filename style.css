@@ -4525,3 +4525,73 @@ select:focus {
         grid-template-columns: minmax(0, 1fr) 90px;
     }
 }
+
+
+/* ==================================================
+   V22 — Production Card Styling
+================================================== */
+
+/*
+ * Production cards now have a subtle status colour so they stand away from
+ * the white Archive background without becoming visually heavy.
+ */
+.archive-production-card {
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+
+/* Current / active Production */
+.archive-production-card-active {
+    background: #f7f3ff;
+    border-color: #d8c8ff;
+}
+
+.archive-production-card-active .archive-production-summary:hover {
+    background: #eee7ff;
+}
+
+
+/* Upcoming Production */
+.archive-production-card-upcoming {
+    background: #f2f7ff;
+    border-color: #c9dcff;
+}
+
+.archive-production-card-upcoming .archive-production-summary:hover {
+    background: #e8f1ff;
+}
+
+
+/* Finished Production */
+.archive-production-card-finished {
+    background: #f5f6f8;
+    border-color: #d8dce3;
+}
+
+.archive-production-card-finished .archive-production-summary:hover {
+    background: #eceef2;
+}
+
+
+/*
+ * Once opened, the report area remains neutral/white so tables, controls and
+ * figures retain maximum readability.
+ */
+.archive-production-card .archive-production-details {
+    background: var(--white);
+}
+
+
+/*
+ * Slightly strengthen the outline of the currently expanded Production.
+ */
+.archive-production-card:has(
+    .archive-production-summary[aria-expanded="true"]
+) {
+    box-shadow:
+        0 0 0 1px rgba(15, 23, 42, 0.05),
+        0 8px 20px rgba(15, 23, 42, 0.06);
+}

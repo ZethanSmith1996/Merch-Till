@@ -2012,7 +2012,7 @@ function renderProductionList(rows) {
                 );
 
             card.className =
-                "archive-production-card";
+                `archive-production-card archive-production-card-${production.status}`;
 
             const expanded =
                 String(
