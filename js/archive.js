@@ -11,6 +11,7 @@ let productions = [];
 let unassignedSessions = [];
 let expandedProductionId = null;
 let archiveRefreshTimer = null;
+let lastArchiveDataSignature = "";
 
 let sessionAssignmentProduction = null;
 let sessionAssignmentEligibleSessions = [];
@@ -290,6 +291,185 @@ function normaliseProduction(row) {
 }
 
 
+
+function archiveDataSignature(
+    productionRows,
+    unassignedRows
+) {
+    /*
+     * Include only fields that affect the visible Archive list/banners.
+     * If nothing has changed, a background refresh does not need to
+     * rebuild the DOM — which also avoids disturbing the user's scroll.
+     */
+    return JSON.stringify({
+        productions:
+            productionRows.map(
+                function (production) {
+                    return {
+                        id:
+                            production.id,
+                        name:
+                            production.name,
+                        description:
+                            production.description,
+                        startDate:
+                            production.startDate,
+                        autoCloseDate:
+                            production.autoCloseDate,
+                        manuallyClosedAt:
+                            production.manuallyClosedAt,
+                        status:
+                            production.status,
+                        sessionCount:
+                            production.sessionCount,
+                        moneyTaken:
+                            production.moneyTaken,
+                        productsSold:
+                            production.productsSold,
+                        productCount:
+                            production.productCount
+                    };
+                }
+            ),
+        unassigned:
+            Array.isArray(
+                unassignedRows
+            )
+                ? unassignedRows.map(
+                    function (session) {
+                        return {
+                            id:
+                                session.id,
+                            status:
+                                session.status,
+                            opened_at:
+                                session.opened_at,
+                            closed_at:
+                                session.closed_at
+                        };
+                    }
+                )
+                : []
+    });
+}
+
+
+function captureArchiveViewport() {
+    const scrollY =
+        window.scrollY ||
+        window.pageYOffset ||
+        0;
+
+    let anchor = null;
+
+    if (
+        expandedProductionId !==
+        null
+    ) {
+        const expandedButton =
+            dom.archiveProductionList
+                ?.querySelector(
+                    `.archive-production-summary[aria-expanded="true"]`
+                );
+
+        if (expandedButton) {
+            const rect =
+                expandedButton
+                    .getBoundingClientRect();
+
+            anchor = {
+                productionId:
+                    expandedProductionId,
+                viewportTop:
+                    rect.top
+            };
+        }
+    }
+
+    return {
+        scrollY,
+        anchor
+    };
+}
+
+
+function restoreArchiveViewport(
+    viewport
+) {
+    if (!viewport) {
+        return;
+    }
+
+    const restore =
+        function () {
+            /*
+             * Prefer keeping the expanded Production header at the same
+             * viewport position. This survives height changes above it.
+             */
+            if (
+                viewport.anchor &&
+                dom.archiveProductionList
+            ) {
+                const expandedButton =
+                    dom.archiveProductionList
+                        .querySelector(
+                            `.archive-production-summary[aria-expanded="true"]`
+                        );
+
+                if (expandedButton) {
+                    const currentTop =
+                        expandedButton
+                            .getBoundingClientRect()
+                            .top;
+
+                    const difference =
+                        currentTop -
+                        viewport.anchor
+                            .viewportTop;
+
+                    if (
+                        Math.abs(
+                            difference
+                        ) > 1
+                    ) {
+                        window.scrollBy(
+                            0,
+                            difference
+                        );
+                    }
+
+                    return;
+                }
+            }
+
+            window.scrollTo(
+                0,
+                viewport.scrollY
+            );
+        };
+
+    /*
+     * Restore immediately after the list is rebuilt and once more after
+     * the expanded Production report has had a chance to render.
+     */
+    window.requestAnimationFrame(
+        function () {
+            restore();
+
+            window.setTimeout(
+                restore,
+                80
+            );
+
+            window.setTimeout(
+                restore,
+                250
+            );
+        }
+    );
+}
+
+
 async function loadArchiveData({
     silent = false
 } = {}) {
@@ -351,15 +531,57 @@ async function loadArchiveData({
                 )
             ]);
 
-        productions =
+        const refreshedProductions =
             (await productionResponse.json())
                 .map(normaliseProduction);
 
-        unassignedSessions =
+        const refreshedUnassignedSessions =
             await unassignedResponse.json();
+
+        const refreshedSignature =
+            archiveDataSignature(
+                refreshedProductions,
+                refreshedUnassignedSessions
+            );
+
+        const dataChanged =
+            refreshedSignature !==
+            lastArchiveDataSignature;
+
+        /*
+         * Background refreshes are deliberately non-disruptive.
+         * If the cloud data has not changed, leave the current Archive
+         * DOM completely untouched.
+         */
+        if (
+            silent &&
+            !dataChanged
+        ) {
+            return;
+        }
+
+        const viewport =
+            silent
+                ? captureArchiveViewport()
+                : null;
+
+        productions =
+            refreshedProductions;
+
+        unassignedSessions =
+            refreshedUnassignedSessions;
+
+        lastArchiveDataSignature =
+            refreshedSignature;
 
         applyArchiveFilters();
         renderUnassignedBanner();
+
+        if (silent) {
+            restoreArchiveViewport(
+                viewport
+            );
+        }
 
         if (!silent) {
             setArchiveStatus(
