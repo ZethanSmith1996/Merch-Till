@@ -51,7 +51,7 @@
         href="icons/icon-192.png"
     >
 
-    <link rel="stylesheet" href="style.css?v=stage19-5">
+    <link rel="stylesheet" href="style.css?v=stage20">
 </head>
 
 <body>
@@ -485,13 +485,26 @@
                             </p>
                         </div>
 
-                        <button
-                            type="button"
-                            id="add-product-button"
-                            class="add-product-button"
-                        >
-                            + Add Product
-                        </button>
+                        <div class="products-heading-actions">
+
+                            <button
+                                type="button"
+                                id="add-product-button"
+                                class="add-product-button"
+                            >
+                                + Add Product
+                            </button>
+
+                            <button
+                                type="button"
+                                id="add-delivery-button"
+                                class="secondary-button"
+                                hidden
+                            >
+                                + Add Delivery
+                            </button>
+
+                        </div>
 
                     </div>
 
@@ -1675,6 +1688,86 @@
                 </div>
             </form>
         </div>
+    </div>
+
+
+    <!-- ==================================================
+         Add Delivery popup
+    ================================================== -->
+    <div
+        id="delivery-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box delivery-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delivery-modal-title"
+        >
+
+            <div class="modal-header">
+
+                <div>
+                    <h2 id="delivery-modal-title">
+                        Add Delivery
+                    </h2>
+
+                    <p
+                        id="delivery-production-label"
+                        class="session-assignment-production-label"
+                    ></p>
+                </div>
+
+                <button
+                    type="button"
+                    id="close-delivery-modal"
+                    class="modal-close-button"
+                    aria-label="Close delivery"
+                >
+                    ×
+                </button>
+
+            </div>
+
+            <p class="field-help">
+                Enter only stock physically delivered. Manual stock corrections should still be made from the Products table.
+            </p>
+
+            <div
+                id="delivery-product-list"
+                class="delivery-product-list"
+            ></div>
+
+            <p
+                id="delivery-error"
+                class="form-error"
+                aria-live="polite"
+            ></p>
+
+            <div class="modal-actions">
+
+                <button
+                    type="button"
+                    id="cancel-delivery-button"
+                    class="secondary-button"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="button"
+                    id="save-delivery-button"
+                    class="save-product-button"
+                >
+                    Add Delivery
+                </button>
+
+            </div>
+
+        </div>
+
     </div>
 
 
@@ -2884,7 +2977,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=stage19-5"></script>
+<script type="module" src="js/app.js?v=stage20"></script>
 
 </body>
 </html>

@@ -1743,8 +1743,311 @@ async function deleteProductGroup(groupId) {
     }
 }
 
+
+function deliveryIsAvailable() {
+    return (
+        navigator.onLine &&
+        currentDepartmentIsMerchandise() &&
+        state.currentProduction &&
+        Number(state.currentProduction.id) > 0
+    );
+}
+
+
+function updateDeliveryButtonVisibility() {
+    if (!dom.addDeliveryButton) {
+        return;
+    }
+
+    const visible =
+        currentDepartmentIsMerchandise() &&
+        state.currentProduction &&
+        Number(state.currentProduction.id) > 0;
+
+    dom.addDeliveryButton.hidden =
+        !visible;
+
+    dom.addDeliveryButton.disabled =
+        !deliveryIsAvailable();
+}
+
+
+function deliveryProductName(product) {
+    return product.variantName
+        ? `${product.name} — ${product.variantName}`
+        : product.name;
+}
+
+
+async function openDeliveryModal() {
+    if (!requireOnlineProductManagement()) {
+        return;
+    }
+
+    if (
+        !state.currentProduction ||
+        !currentDepartmentIsMerchandise()
+    ) {
+        window.alert(
+            "Deliveries can only be added to the current Merchandise Production."
+        );
+        return;
+    }
+
+    try {
+        const authoritative =
+            await fetchAuthoritativeCloudProducts();
+
+        state.products =
+            authoritative;
+
+        const rows =
+            authoritative.filter(
+                function (product) {
+                    return (
+                        Number(product.productionId) ===
+                        Number(state.currentProduction.id) &&
+                        Number(product.departmentId || 1) === 1
+                    );
+                }
+            );
+
+        dom.deliveryProductionLabel.textContent =
+            state.currentProduction.name || "Current Production";
+
+        dom.deliveryError.textContent = "";
+
+        if (rows.length === 0) {
+            dom.deliveryProductList.innerHTML =
+                '<div class="archive-empty-message">No products are currently assigned to this Production.</div>';
+        } else {
+            dom.deliveryProductList.innerHTML =
+                rows.map(
+                    function (product) {
+                        return `
+                            <label class="delivery-product-row">
+                                <span class="delivery-product-copy">
+                                    <strong>
+                                        ${escapeHTML(deliveryProductName(product))}
+                                    </strong>
+
+                                    <small>
+                                        Current stock: ${Number(product.stock) || 0}
+                                    </small>
+                                </span>
+
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value="0"
+                                    inputmode="numeric"
+                                    data-delivery-product-id="${product.id}"
+                                    aria-label="Delivered quantity for ${escapeHTML(deliveryProductName(product))}"
+                                >
+                            </label>
+                        `;
+                    }
+                ).join("");
+        }
+
+        dom.deliveryModal.hidden = false;
+
+    } catch (error) {
+        window.alert(
+            "The delivery form could not be opened.\n\n" +
+            (
+                error instanceof Error
+                    ? error.message
+                    : String(error)
+            )
+        );
+    }
+}
+
+
+function closeDeliveryModal() {
+    if (!dom.deliveryModal) {
+        return;
+    }
+
+    dom.deliveryModal.hidden = true;
+    dom.deliveryError.textContent = "";
+    dom.deliveryProductList.innerHTML = "";
+}
+
+
+function collectDeliveryItems() {
+    return Array.from(
+        dom.deliveryProductList
+            ?.querySelectorAll(
+                "[data-delivery-product-id]"
+            ) || []
+    )
+        .map(
+            function (input) {
+                return {
+                    product_id:
+                        Number(
+                            input.dataset
+                                .deliveryProductId
+                        ),
+                    quantity:
+                        Number(
+                            input.value
+                        )
+                };
+            }
+        )
+        .filter(
+            function (item) {
+                return (
+                    Number.isInteger(item.quantity) &&
+                    item.quantity > 0
+                );
+            }
+        );
+}
+
+
+async function saveDelivery() {
+    if (
+        !state.currentProduction ||
+        !currentDepartmentIsMerchandise()
+    ) {
+        return;
+    }
+
+    const inputs =
+        Array.from(
+            dom.deliveryProductList
+                ?.querySelectorAll(
+                    "[data-delivery-product-id]"
+                ) || []
+        );
+
+    const invalid =
+        inputs.some(
+            function (input) {
+                const value =
+                    Number(input.value);
+
+                return (
+                    !Number.isInteger(value) ||
+                    value < 0
+                );
+            }
+        );
+
+    if (invalid) {
+        dom.deliveryError.textContent =
+            "Delivered quantities must be whole numbers of zero or more.";
+        return;
+    }
+
+    const items =
+        collectDeliveryItems();
+
+    if (items.length === 0) {
+        dom.deliveryError.textContent =
+            "Enter a delivered quantity for at least one product.";
+        return;
+    }
+
+    dom.saveDeliveryButton.disabled = true;
+    dom.saveDeliveryButton.textContent =
+        "Adding…";
+    dom.deliveryError.textContent = "";
+
+    try {
+        await productCloudRequest(
+            "rpc/add_production_delivery",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    "Accept":
+                        "application/json"
+                },
+                body:
+                    JSON.stringify({
+                        p_production_id:
+                            Number(
+                                state.currentProduction.id
+                            ),
+                        p_items:
+                            items
+                    })
+            }
+        );
+
+        const productionId =
+            Number(
+                state.currentProduction.id
+            );
+
+        closeDeliveryModal();
+
+        await refreshProductCacheFromCloud();
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "production-stock-changed",
+                {
+                    detail: {
+                        productionId
+                    }
+                }
+            )
+        );
+
+        setProductCloudStatus(
+            "Delivery added successfully."
+        );
+
+    } catch (error) {
+        dom.deliveryError.textContent =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+    } finally {
+        dom.saveDeliveryButton.disabled =
+            false;
+
+        dom.saveDeliveryButton.textContent =
+            "Add Delivery";
+    }
+}
+
+
 export function initialiseProductManagement() {
     dom.addProductButton.addEventListener("click", openAddProductModal);
+
+    dom.addDeliveryButton
+        ?.addEventListener(
+            "click",
+            openDeliveryModal
+        );
+
+    dom.closeDeliveryModalButton
+        ?.addEventListener(
+            "click",
+            closeDeliveryModal
+        );
+
+    dom.cancelDeliveryButton
+        ?.addEventListener(
+            "click",
+            closeDeliveryModal
+        );
+
+    dom.saveDeliveryButton
+        ?.addEventListener(
+            "click",
+            saveDelivery
+        );
     dom.closeProductModalButton.addEventListener("click", closeProductModal);
     dom.cancelProductButton.addEventListener("click", closeProductModal);
     dom.productForm.addEventListener("submit", saveProduct);
@@ -1763,7 +2066,29 @@ export function initialiseProductManagement() {
         }
     });
 
+    dom.deliveryModal
+        ?.addEventListener(
+            "click",
+            function (event) {
+                if (
+                    event.target ===
+                    dom.deliveryModal
+                ) {
+                    closeDeliveryModal();
+                }
+            }
+        );
+
     document.addEventListener("keydown", function (event) {
+        if (
+            event.key === "Escape" &&
+            dom.deliveryModal &&
+            !dom.deliveryModal.hidden
+        ) {
+            closeDeliveryModal();
+            return;
+        }
+
         if (event.key === "Escape" && !dom.productModal.hidden) {
             closeProductModal();
         }
@@ -1783,6 +2108,33 @@ export function initialiseProductManagement() {
         "cloud-data-loaded",
         updateProductManagementAvailability
     );
+
+    document.addEventListener(
+        "production-data-changed",
+        updateDeliveryButtonVisibility
+    );
+
+    document.addEventListener(
+        "department-context-changed",
+        updateDeliveryButtonVisibility
+    );
+
+    document.addEventListener(
+        "cloud-data-loaded",
+        updateDeliveryButtonVisibility
+    );
+
+    window.addEventListener(
+        "online",
+        updateDeliveryButtonVisibility
+    );
+
+    window.addEventListener(
+        "offline",
+        updateDeliveryButtonVisibility
+    );
+
+    updateDeliveryButtonVisibility();
 
     updateProductManagementAvailability();
 }

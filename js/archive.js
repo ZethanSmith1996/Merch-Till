@@ -3,7 +3,7 @@ import { supabaseConfig, currencyFormatter } from "./config.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step1e";
 import { canManageArchive } from "./permissions.js";
 import { escapeHTML } from "./utils.js";
-import { openAddProductForProduction } from "./products.js?v=stage16b";
+import { openAddProductForProduction } from "./products.js?v=stage20";
 
 const DEPARTMENT_KEY = "merch";
 
@@ -23,6 +23,7 @@ const productionReportFilters = new Map();
 const expandedTransactionIds = new Set();
 const expandedProductLists = new Set();
 const expandedTransactionLists = new Set();
+const expandedStockLists = new Set();
 
 let comparisonSelectedProductionIds = new Set();
 let comparisonRunning = false;
@@ -900,6 +901,35 @@ function renderArchiveTransaction(
 }
 
 
+
+function normaliseProductionStockRow(row) {
+    return {
+        productId:
+            Number(row.product_id),
+        productName:
+            row.variant_name
+                ? `${row.product_name} — ${row.variant_name}`
+                : row.product_name,
+        initialStock:
+            Number(row.initial_stock) || 0,
+        deliveries:
+            Number(row.delivered_stock) || 0,
+        openingStock:
+            Number(row.opening_stock) || 0,
+        closingStock:
+            row.closing_stock === null ||
+            row.closing_stock === undefined
+                ? null
+                : Number(row.closing_stock),
+        difference:
+            row.difference === null ||
+            row.difference === undefined
+                ? null
+                : Number(row.difference)
+    };
+}
+
+
 function renderProductionReport(
     production
 ) {
@@ -1020,6 +1050,11 @@ function renderProductionReport(
             activeSales
         );
 
+    const stockExpanded =
+        expandedStockLists.has(
+            production.id
+        );
+
     const productsExpanded =
         expandedProductLists.has(
             production.id
@@ -1029,6 +1064,13 @@ function renderProductionReport(
         expandedTransactionLists.has(
             production.id
         );
+
+    const stockRows =
+        Array.isArray(
+            reportData.stockSummary
+        )
+            ? reportData.stockSummary
+            : [];
 
     const sessionOptions =
         reportData.sessions
@@ -1187,6 +1229,74 @@ function renderProductionReport(
                     <strong class="report-value">
                         ${activeSales.length}
                     </strong>
+                </div>
+
+            </div>
+
+
+            <div class="archive-report-stock">
+
+                <button
+                    type="button"
+                    class="archive-report-section-toggle"
+                    data-toggle-stock="${production.id}"
+                    aria-expanded="${stockExpanded}"
+                >
+                    <span>
+                        <strong>Opening / Closing Stock</strong>
+                        <small>
+                            ${stockRows.length} product${stockRows.length === 1 ? "" : "s"}
+                        </small>
+                    </span>
+
+                    <span>
+                        ${stockExpanded ? "Hide" : "Show"}
+                    </span>
+                </button>
+
+                <div
+                    class="archive-report-collapsible-content"
+                    ${stockExpanded ? "" : "hidden"}
+                >
+                    ${
+                        stockRows.length > 0
+                            ? `
+                                <p class="field-help archive-stock-help">
+                                    Opening Stock includes quantities recorded through Add Delivery.
+                                </p>
+
+                                <div class="archive-stock-table-wrap">
+                                    <table class="archive-stock-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Product</th>
+                                                <th>Opening Stock</th>
+                                                <th>Closing Stock</th>
+                                                <th>Difference</th>
+                                            </tr>
+                                        </thead>
+
+                                        <tbody>
+                                            ${
+                                                stockRows.map(
+                                                    function (row) {
+                                                        return `
+                                                            <tr>
+                                                                <td>${escapeHTML(row.productName)}</td>
+                                                                <td>${row.openingStock}</td>
+                                                                <td>${row.closingStock === null ? "—" : row.closingStock}</td>
+                                                                <td>${row.difference === null ? "—" : row.difference}</td>
+                                                            </tr>
+                                                        `;
+                                                    }
+                                                ).join("")
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                              `
+                            : '<p class="archive-report-empty">No stock snapshot is available for this Production. Stock tracking begins with V20.</p>'
+                    }
                 </div>
 
             </div>
@@ -1393,6 +1503,35 @@ function bindProductionReportControls(
         }
     );
 
+    const stockToggle =
+        document.querySelector(
+            `[data-toggle-stock="${production.id}"]`
+        );
+
+    stockToggle?.addEventListener(
+        "click",
+        function () {
+            if (
+                expandedStockLists.has(
+                    production.id
+                )
+            ) {
+                expandedStockLists.delete(
+                    production.id
+                );
+            } else {
+                expandedStockLists.add(
+                    production.id
+                );
+            }
+
+            renderProductionReport(
+                production
+            );
+        }
+    );
+
+
     const productsToggle =
         document.querySelector(
             `[data-toggle-products="${production.id}"]`
@@ -1516,27 +1655,52 @@ async function loadProductionReport(
     );
 
     try {
-        const response =
-            await archiveRequest(
-                "rpc/get_production_report_data",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                        "Accept":
-                            "application/json"
-                    },
-                    body:
-                        JSON.stringify({
-                            p_production_id:
-                                production.id
-                        })
-                }
-            );
+        const [
+            reportResponse,
+            stockResponse
+        ] =
+            await Promise.all([
+                archiveRequest(
+                    "rpc/get_production_report_data",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+                            "Accept":
+                                "application/json"
+                        },
+                        body:
+                            JSON.stringify({
+                                p_production_id:
+                                    production.id
+                            })
+                    }
+                ),
+                archiveRequest(
+                    "rpc/get_production_stock_summary",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+                            "Accept":
+                                "application/json"
+                        },
+                        body:
+                            JSON.stringify({
+                                p_production_id:
+                                    production.id
+                            })
+                    }
+                )
+            ]);
 
         const result =
-            await response.json();
+            await reportResponse.json();
+
+        const stockResult =
+            await stockResponse.json();
 
         productionReportCache.set(
             production.id,
@@ -1559,6 +1723,14 @@ async function loadProductionReport(
                                 .map(
                                     normaliseReportSale
                                 )
+                            : [],
+                    stockSummary:
+                        Array.isArray(
+                            stockResult
+                        )
+                            ? stockResult.map(
+                                normaliseProductionStockRow
+                            )
                             : []
                 }
             }
@@ -4209,6 +4381,23 @@ export function initialiseArchive() {
             }
         }
     );
+
+    document.addEventListener(
+        "production-stock-changed",
+        function (event) {
+            const productionId =
+                Number(
+                    event.detail?.productionId
+                );
+
+            if (productionId) {
+                productionReportCache.delete(
+                    productionId
+                );
+            }
+        }
+    );
+
 
     document.addEventListener(
         "archive-production-product-created",

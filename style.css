@@ -4421,3 +4421,107 @@ select:focus {
         }
     }
 }
+
+
+/* ==================================================
+   V20 — Production Stock / Deliveries
+================================================== */
+
+.products-heading-actions {
+    display: grid;
+    gap: 8px;
+}
+
+.products-heading-actions button {
+    min-width: 150px;
+}
+
+.delivery-modal-box {
+    max-width: 720px;
+}
+
+.delivery-product-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.delivery-product-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 110px;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 12px;
+    border: 1px solid var(--grey-200);
+    border-radius: 9px;
+    background: var(--white);
+}
+
+.delivery-product-copy strong,
+.delivery-product-copy small {
+    display: block;
+}
+
+.delivery-product-copy small {
+    margin-top: 3px;
+    color: var(--grey-600);
+}
+
+.delivery-product-row input {
+    width: 100%;
+    min-height: 40px;
+    text-align: center;
+}
+
+.archive-report-stock {
+    margin-top: 14px;
+}
+
+.archive-stock-help {
+    margin: 0 0 10px;
+}
+
+.archive-stock-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--grey-200);
+    border-radius: 9px;
+}
+
+.archive-stock-table {
+    width: 100%;
+    min-width: 620px;
+    border-collapse: collapse;
+    background: var(--white);
+}
+
+.archive-stock-table th,
+.archive-stock-table td {
+    padding: 11px 13px;
+    border-bottom: 1px solid var(--grey-200);
+    text-align: left;
+}
+
+.archive-stock-table th {
+    background: var(--grey-100);
+    color: var(--grey-700);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.archive-stock-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+@media (max-width: 700px) {
+    .products-heading-actions {
+        width: 100%;
+    }
+
+    .products-heading-actions button {
+        width: 100%;
+    }
+
+    .delivery-product-row {
+        grid-template-columns: minmax(0, 1fr) 90px;
+    }
+}
