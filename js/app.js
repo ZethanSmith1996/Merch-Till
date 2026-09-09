@@ -52,7 +52,7 @@ import { initialiseArchive } from "./archive.js?v=stage22";
 import {
     initialiseAccount,
     refreshDiscountAuthorisers
-} from "./account.js?v=stage23-1";
+} from "./account.js?v=stage23-2";
 
 function refreshProductDisplays() {
     renderTillProducts();
