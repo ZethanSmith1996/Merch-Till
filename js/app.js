@@ -18,7 +18,7 @@ import {
     renderCart,
     renderTillProducts,
     refreshTillAvailability
-} from "./till.js?v=stage15e";
+} from "./till.js?v=stage23";
 import {
     initialiseSessions,
     renderSessionStatus,
@@ -31,7 +31,7 @@ import {
 import {
     initialiseUserManagement,
     renderUsersTable
-} from "./users.js?v=priority14a";
+} from "./users.js?v=stage23";
 import {
     initialiseCloudSync,
     flushPendingCloudSync,
@@ -49,6 +49,10 @@ import {
 } from "./department-context.js?v=stage15f2";
 import { initialiseProductions, refreshCurrentProduction } from "./productions.js?v=stage15e1";
 import { initialiseArchive } from "./archive.js?v=stage22";
+import {
+    initialiseAccount,
+    refreshDiscountAuthorisers
+} from "./account.js?v=stage23";
 
 function refreshProductDisplays() {
     renderTillProducts();
@@ -91,6 +95,7 @@ async function startApplication() {
     registerMerchTillServiceWorker();
 
     initialiseAuthentication();
+    initialiseAccount();
     initialiseNavigation();
     initialiseTill();
     initialiseProductManagement();
@@ -240,6 +245,10 @@ async function startApplication() {
             sessionStorage.getItem("merchTillUsername") || "";
 
         if (isCloudUsername(signedInUsername)) {
+            await refreshDiscountAuthorisers({
+                silent: true
+            });
+
             await refreshLocalCacheFromCloud();
             await refreshOptionsFromCloud({
                 silent: true

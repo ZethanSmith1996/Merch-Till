@@ -1,6 +1,6 @@
 export const supabaseConfig = {
-    url: "https://zdxduhnfjebahfzuqttk.supabase.co",
-    publishableKey: "sb_publishable_ReTBviIlpav9HsnAqcxnSA_l6yHSGhy"
+    url: "https://duadghkvimbgffzzxzfo.supabase.co",
+    publishableKey: "sb_publishable_7ac6iqUKBWuYzWq1HBTEIw_zLGcirwr"
 };
 
 /*
@@ -18,12 +18,6 @@ export const localTrainingUser = {
     protected: false
 };
 
-export const discountAuthorisers = [
-    { username: "master", pin: "261196" },
-    { username: "admin", pin: "1234" },
-    { username: "summer", pin: "290304" },
-    { username: "lynda", pin: "2509" }
-];
 
 
 export const currencyFormatter = new Intl.NumberFormat("en-GB", {

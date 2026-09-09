@@ -2,10 +2,11 @@ import { dom } from "./dom.js";
 import { canManageUsers } from "./permissions.js";
 import { escapeHTML } from "./utils.js";
 import { getValidCloudAccessToken } from "./auth.js";
+import { supabaseConfig } from "./config.js?v=stage23";
 import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
 
 const MANAGE_USERS_URL =
-    "https://zdxduhnfjebahfzuqttk.supabase.co/functions/v1/manage-users";
+    `${supabaseConfig.url}/functions/v1/manage-users`;
 
 const roleLabels = {
     "master-admin": "Master Admin",

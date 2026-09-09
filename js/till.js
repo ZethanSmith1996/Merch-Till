@@ -1,4 +1,5 @@
-import { currencyFormatter, discountAuthorisers } from "./config.js";
+import { currencyFormatter } from "./config.js?v=stage23";
+import { validateDiscountPin } from "./account.js?v=stage23";
 import { dom } from "./dom.js";
 
 import {
@@ -440,13 +441,8 @@ function closeDiscountModal() {
     dom.discountFormError.textContent = "";
 }
 
-function findDiscountAuthoriser(pin) {
-    return discountAuthorisers.find(function (authoriser) {
-        return authoriser.pin === pin;
-    }) || null;
-}
 
-function applyDiscount(event) {
+async function applyDiscount(event) {
     event.preventDefault();
 
     if (state.cart.size === 0) {
@@ -463,11 +459,26 @@ function applyDiscount(event) {
         return;
     }
 
-    const authoriser = findDiscountAuthoriser(pin);
+    let authoriser = null;
+
+    try {
+        authoriser =
+            await validateDiscountPin(
+                pin
+            );
+    } catch (error) {
+        dom.discountFormError.textContent =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+        dom.discountPinInput.select();
+        return;
+    }
 
     if (!authoriser) {
         dom.discountFormError.textContent =
-            "The Admin PIN is incorrect.";
+            "The discount PIN is incorrect.";
         dom.discountPinInput.select();
         return;
     }

@@ -51,7 +51,7 @@
         href="icons/icon-192.png"
     >
 
-    <link rel="stylesheet" href="style.css?v=stage22">
+    <link rel="stylesheet" href="style.css?v=stage23">
 </head>
 
 <body>
@@ -164,9 +164,15 @@
 
     <div class="account-area">
 
-                <span id="logged-in-user">
+                <button
+                    type="button"
+                    id="logged-in-user"
+                    class="account-user-button"
+                    title="My Account"
+                    aria-haspopup="dialog"
+                >
                     Admin
-                </span>
+                </button>
 
                 <button
                     type="button"
@@ -2897,6 +2903,214 @@
 
 
     
+    <!-- ==================================================
+         My Account popup
+    ================================================== -->
+    <div
+        id="my-account-modal"
+        class="modal-overlay"
+        hidden
+    >
+
+        <div
+            class="modal-box my-account-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="my-account-title"
+        >
+
+            <div class="modal-header">
+
+                <div>
+                    <h2 id="my-account-title">
+                        My Account
+                    </h2>
+
+                    <p id="my-account-summary">
+                        Account settings
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    id="close-my-account-modal"
+                    class="modal-close-button"
+                    aria-label="Close My Account"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <div class="my-account-identity">
+
+                <div>
+                    <span>Username</span>
+                    <strong id="my-account-username">—</strong>
+                </div>
+
+                <div>
+                    <span>Role</span>
+                    <strong id="my-account-role">—</strong>
+                </div>
+
+            </div>
+
+
+            <div
+                id="my-account-cloud-settings"
+                class="my-account-settings"
+            >
+
+                <section class="my-account-card">
+
+                    <div class="my-account-card-heading">
+                        <h3>Change Password</h3>
+
+                        <p>
+                            Change the password used to log in to your own account.
+                        </p>
+                    </div>
+
+                    <form id="my-account-password-form">
+
+                        <label for="my-account-new-password">
+                            New password
+                        </label>
+
+                        <input
+                            type="password"
+                            id="my-account-new-password"
+                            autocomplete="new-password"
+                            minlength="8"
+                            required
+                        >
+
+                        <label for="my-account-confirm-password">
+                            Confirm new password
+                        </label>
+
+                        <input
+                            type="password"
+                            id="my-account-confirm-password"
+                            autocomplete="new-password"
+                            minlength="8"
+                            required
+                        >
+
+                        <p
+                            id="my-account-password-error"
+                            class="form-error"
+                            aria-live="polite"
+                        ></p>
+
+                        <div class="modal-actions my-account-inline-actions">
+                            <button
+                                type="submit"
+                                class="save-product-button"
+                            >
+                                Change Password
+                            </button>
+                        </div>
+
+                    </form>
+
+                </section>
+
+
+                <section
+                    id="my-account-discount-card"
+                    class="my-account-card"
+                    hidden
+                >
+
+                    <div class="my-account-card-heading">
+                        <h3>Discount Code</h3>
+
+                        <p>
+                            Set the PIN you use to authorise discounts at the Till.
+                        </p>
+                    </div>
+
+                    <form id="my-account-discount-form">
+
+                        <label for="my-account-discount-pin">
+                            New discount PIN
+                        </label>
+
+                        <input
+                            type="password"
+                            id="my-account-discount-pin"
+                            inputmode="numeric"
+                            pattern="[0-9]{4,8}"
+                            minlength="4"
+                            maxlength="8"
+                            autocomplete="new-password"
+                            required
+                        >
+
+                        <label for="my-account-confirm-discount-pin">
+                            Confirm discount PIN
+                        </label>
+
+                        <input
+                            type="password"
+                            id="my-account-confirm-discount-pin"
+                            inputmode="numeric"
+                            pattern="[0-9]{4,8}"
+                            minlength="4"
+                            maxlength="8"
+                            autocomplete="new-password"
+                            required
+                        >
+
+                        <p class="field-help">
+                            Use 4–8 digits. The new PIN is synchronised to authorised Till devices.
+                        </p>
+
+                        <p
+                            id="my-account-discount-error"
+                            class="form-error"
+                            aria-live="polite"
+                        ></p>
+
+                        <div class="modal-actions my-account-inline-actions">
+                            <button
+                                type="submit"
+                                class="save-product-button"
+                            >
+                                Change Discount PIN
+                            </button>
+                        </div>
+
+                    </form>
+
+                </section>
+
+            </div>
+
+
+            <div
+                id="my-account-training-message"
+                class="archive-empty-message my-account-training-message"
+                hidden
+            >
+                Training Mode is a local simulation account and does not have cloud account settings.
+            </div>
+
+
+            <p
+                id="my-account-status"
+                class="cloud-upload-status"
+                aria-live="polite"
+            ></p>
+
+        </div>
+
+    </div>
+
+
     <div
         id="password-change-modal"
         class="modal"
@@ -2977,7 +3191,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=stage22"></script>
+<script type="module" src="js/app.js?v=stage23"></script>
 
 </body>
 </html>
