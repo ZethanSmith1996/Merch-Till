@@ -8,10 +8,10 @@ import {
     logAuditEvent,
     auditActorUsername
 } from "./audit-log.js?v=stage15f";
-
-
-const DISCOUNT_AUTHORISERS_CACHE_KEY =
-    "merchTillDiscountAuthorisersV23";
+import {
+    cacheDiscountAuthorisers,
+    getCachedDiscountAuthorisers
+} from "./discount-cache.js?v=stage23-1";
 
 
 const roleLabels = {
@@ -138,75 +138,10 @@ async function accountRequest(
 }
 
 
-async function sha256Hex(
-    value
-) {
-    const encoded =
-        new TextEncoder()
-            .encode(
-                String(value)
-            );
-
-    const digest =
-        await crypto.subtle.digest(
-            "SHA-256",
-            encoded
-        );
-
-    return Array.from(
-        new Uint8Array(
-            digest
-        )
-    )
-        .map(
-            function (byte) {
-                return byte
-                    .toString(16)
-                    .padStart(2, "0");
-            }
-        )
-        .join("");
-}
 
 
-function readCachedDiscountAuthorisers() {
-    try {
-        const parsed =
-            JSON.parse(
-                localStorage.getItem(
-                    DISCOUNT_AUTHORISERS_CACHE_KEY
-                ) || "[]"
-            );
-
-        return Array.isArray(parsed)
-            ? parsed
-            : [];
-
-    } catch (error) {
-        return [];
-    }
-}
 
 
-function cacheDiscountAuthorisers(
-    rows
-) {
-    localStorage.setItem(
-        DISCOUNT_AUTHORISERS_CACHE_KEY,
-        JSON.stringify(
-            rows.map(
-                function (row) {
-                    return {
-                        username:
-                            row.username,
-                        pinHash:
-                            row.pin_hash
-                    };
-                }
-            )
-        )
-    );
-}
 
 
 export async function refreshDiscountAuthorisers({
@@ -220,7 +155,7 @@ export async function refreshDiscountAuthorisers({
         !isCloudUsername(username) ||
         !navigator.onLine
     ) {
-        return readCachedDiscountAuthorisers();
+        return getCachedDiscountAuthorisers();
     }
 
     try {
@@ -249,7 +184,7 @@ export async function refreshDiscountAuthorisers({
             safeRows
         );
 
-        return readCachedDiscountAuthorisers();
+        return getCachedDiscountAuthorisers();
 
     } catch (error) {
         if (!silent) {
@@ -259,52 +194,11 @@ export async function refreshDiscountAuthorisers({
             );
         }
 
-        return readCachedDiscountAuthorisers();
+        return getCachedDiscountAuthorisers();
     }
 }
 
 
-export async function validateDiscountPin(
-    pin
-) {
-    let authorisers =
-        readCachedDiscountAuthorisers();
-
-    if (navigator.onLine) {
-        authorisers =
-            await refreshDiscountAuthorisers({
-                silent: true
-            });
-    }
-
-    if (
-        authorisers.length === 0
-    ) {
-        throw new Error(
-            navigator.onLine
-                ? "Discount authorisation is not currently available."
-                : "Discount codes have not yet been synchronised to this device. Reconnect once before using discounts offline."
-        );
-    }
-
-    const hash =
-        await sha256Hex(
-            String(pin || "")
-        );
-
-    return (
-        authorisers.find(
-            function (
-                authoriser
-            ) {
-                return (
-                    authoriser.pinHash ===
-                    hash
-                );
-            }
-        ) || null
-    );
-}
 
 
 function renderAccountIdentity() {

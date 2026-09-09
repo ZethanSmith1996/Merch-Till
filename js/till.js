@@ -1,5 +1,5 @@
 import { currencyFormatter } from "./config.js?v=stage23";
-import { validateDiscountPin } from "./account.js?v=stage23";
+import { validateCachedDiscountPin } from "./discount-cache.js?v=stage23-1";
 import { dom } from "./dom.js";
 
 import {
@@ -463,7 +463,7 @@ async function applyDiscount(event) {
 
     try {
         authoriser =
-            await validateDiscountPin(
+            await validateCachedDiscountPin(
                 pin
             );
     } catch (error) {

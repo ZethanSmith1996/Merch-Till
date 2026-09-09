@@ -18,7 +18,7 @@ import {
     renderCart,
     renderTillProducts,
     refreshTillAvailability
-} from "./till.js?v=stage23";
+} from "./till.js?v=stage23-1";
 import {
     initialiseSessions,
     renderSessionStatus,
@@ -52,7 +52,7 @@ import { initialiseArchive } from "./archive.js?v=stage22";
 import {
     initialiseAccount,
     refreshDiscountAuthorisers
-} from "./account.js?v=stage23";
+} from "./account.js?v=stage23-1";
 
 function refreshProductDisplays() {
     renderTillProducts();
