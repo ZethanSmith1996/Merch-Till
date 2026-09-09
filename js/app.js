@@ -48,7 +48,7 @@ import {
     getCurrentDepartment
 } from "./department-context.js?v=stage15f2";
 import { initialiseProductions, refreshCurrentProduction } from "./productions.js?v=stage15e1";
-import { initialiseArchive } from "./archive.js?v=stage22";
+import { initialiseArchive } from "./archive.js?v=stage23-4";
 import {
     initialiseAccount,
     refreshDiscountAuthorisers

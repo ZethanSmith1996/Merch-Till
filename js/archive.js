@@ -1,4 +1,4 @@
-import { dom } from "./dom.js";
+import { dom } from "./dom.js?v=stage23-4";
 import { supabaseConfig, currencyFormatter } from "./config.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step1e";
 import { canManageArchive } from "./permissions.js";
