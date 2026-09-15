@@ -51,7 +51,7 @@
         href="icons/icon-192.png"
     >
 
-    <link rel="stylesheet" href="style.css?v=stage23">
+    <link rel="stylesheet" href="style.css?v=stage24">
 </head>
 
 <body>
@@ -510,6 +510,14 @@
                                 + Add Delivery
                             </button>
 
+                            <button
+                                type="button"
+                                id="record-damage-button"
+                                class="secondary-button"
+                            >
+                                Record Damage
+                            </button>
+
                         </div>
 
                     </div>
@@ -779,6 +787,49 @@
 
                             <div
                                 id="report-transactions"
+                                class="report-transactions"
+                                hidden
+                            ></div>
+
+                        </section>
+
+                    </div>
+
+                    <div class="report-content-grid damage-report-grid">
+
+                        <section class="report-block">
+
+                            <h3>
+                                Products Damaged
+                            </h3>
+
+                            <div id="report-products-damaged">
+                                <p class="report-empty">No damaged products were recorded in this period.</p>
+                            </div>
+
+                        </section>
+
+
+                        <section class="report-block">
+
+                            <div class="report-block-heading">
+
+                                <h3>
+                                    Damage Log
+                                </h3>
+
+                                <button
+                                    type="button"
+                                    id="toggle-damage-log-button"
+                                    class="show-transactions-button"
+                                >
+                                    Show Damage Log
+                                </button>
+
+                            </div>
+
+                            <div
+                                id="report-damage-log"
                                 class="report-transactions"
                                 hidden
                             ></div>
@@ -1700,6 +1751,77 @@
     <!-- ==================================================
          Add Delivery popup
     ================================================== -->
+    <!-- ==================================================
+         Record Damage popup
+    ================================================== -->
+    <div
+        id="damage-modal"
+        class="modal-overlay"
+        hidden
+    >
+        <div
+            class="modal-box delivery-modal-box"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="damage-modal-title"
+        >
+            <div class="modal-header">
+                <div>
+                    <h2 id="damage-modal-title">Record Damage</h2>
+                    <p id="damage-context-label">
+                        Select damaged stock and add an optional reason.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    id="close-damage-modal"
+                    class="modal-close-button"
+                    aria-label="Close Record Damage"
+                >×</button>
+            </div>
+
+            <div class="form-group">
+                <label for="damage-product">Product</label>
+                <select id="damage-product"></select>
+            </div>
+
+            <div class="form-group">
+                <label for="damage-quantity">Quantity damaged</label>
+                <input
+                    type="number"
+                    id="damage-quantity"
+                    min="1"
+                    step="1"
+                    value="1"
+                    inputmode="numeric"
+                >
+                <p id="damage-stock-help" class="field-help"></p>
+            </div>
+
+            <div class="form-group">
+                <label for="damage-reason">Reason / note <span class="optional-label">(optional)</span></label>
+                <textarea
+                    id="damage-reason"
+                    rows="3"
+                    maxlength="500"
+                    placeholder="e.g. Water damaged, torn packaging, broken item"
+                ></textarea>
+            </div>
+
+            <p id="damage-error" class="form-error" aria-live="polite"></p>
+
+            <div class="modal-actions">
+                <button type="button" id="cancel-damage-button" class="secondary-button">
+                    Cancel
+                </button>
+                <button type="button" id="save-damage-button" class="save-product-button">
+                    Record Damage
+                </button>
+            </div>
+        </div>
+    </div>
+
+
     <div
         id="delivery-modal"
         class="modal-overlay"
@@ -3191,7 +3313,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=stage23-4"></script>
+<script type="module" src="js/app.js?v=stage24"></script>
 
 </body>
 </html>

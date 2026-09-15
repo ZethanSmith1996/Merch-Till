@@ -1,4 +1,4 @@
-import { dom } from "./dom.js?v=stage23-4";
+import { dom } from "./dom.js";
 import { supabaseConfig, currencyFormatter } from "./config.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step1e";
 import { canManageArchive } from "./permissions.js";
@@ -24,6 +24,8 @@ const productionReportFilters = new Map();
 const expandedTransactionIds = new Set();
 const expandedProductLists = new Set();
 const expandedTransactionLists = new Set();
+const expandedDamageLists = new Set();
+const expandedDamageLogs = new Set();
 const expandedStockLists = new Set();
 
 let comparisonSelectedProductionIds = new Set();
@@ -1287,6 +1289,73 @@ function renderProductionReport(
             production.id
         );
 
+    const damagesExpanded =
+        expandedDamageLists.has(
+            production.id
+        );
+
+    const damageLogExpanded =
+        expandedDamageLogs.has(
+            production.id
+        );
+
+    const selectedDamages =
+        (reportData.damages || [])
+            .filter(function (damage) {
+                const date =
+                    String(damage.created_at || "")
+                        .slice(0, 10);
+
+                if (filter.from && date < filter.from) return false;
+                if (filter.to && date > filter.to) return false;
+
+                if (
+                    filter.sessionId !== "all" &&
+                    String(damage.session_id) !== String(filter.sessionId)
+                ) {
+                    return false;
+                }
+
+                return true;
+            });
+
+    const activeDamages =
+        selectedDamages.filter(function (damage) {
+            return !damage.undone_at;
+        });
+
+    const damageTotals = new Map();
+
+    activeDamages.forEach(function (damage) {
+        const key =
+            `${damage.product_id}:${damage.variant_name || ""}`;
+
+        if (!damageTotals.has(key)) {
+            damageTotals.set(key, {
+                name: damage.product_name,
+                variant: damage.variant_name,
+                quantity: 0
+            });
+        }
+
+        damageTotals.get(key).quantity +=
+            Number(damage.quantity) || 0;
+    });
+
+    const damageProducts =
+        Array.from(damageTotals.values())
+            .sort(function (a, b) {
+                return (
+                    b.quantity - a.quantity ||
+                    a.name.localeCompare(b.name)
+                );
+            });
+
+    const damagedCount =
+        activeDamages.reduce(function (sum, damage) {
+            return sum + (Number(damage.quantity) || 0);
+        }, 0);
+
     const stockRows =
         Array.isArray(
             reportData.stockSummary
@@ -1615,6 +1684,92 @@ function renderProductionReport(
 
             </div>
 
+
+            <div class="archive-report-damages-section">
+
+                <button
+                    type="button"
+                    class="archive-report-section-toggle"
+                    data-toggle-damages="${production.id}"
+                    aria-expanded="${damagesExpanded}"
+                >
+                    <span>
+                        <strong>Damaged Stock</strong>
+                        <small>${damagedCount} item${damagedCount === 1 ? "" : "s"} currently recorded as damaged</small>
+                    </span>
+                    <span>${damagesExpanded ? "Hide" : "Show"}</span>
+                </button>
+
+                <div
+                    class="archive-report-collapsible-content archive-damage-overview"
+                    ${damagesExpanded ? "" : "hidden"}
+                >
+                    ${
+                        damageProducts.length > 0
+                            ? damageProducts.map(function (row) {
+                                return `
+                                    <div class="archive-report-product-row">
+                                        <span>
+                                            ${escapeHTML(row.name)}
+                                            ${row.variant ? `<small class="report-variant-breakdown">${escapeHTML(row.variant)}</small>` : ""}
+                                        </span>
+                                        <strong>${row.quantity} damaged</strong>
+                                    </div>
+                                `;
+                            }).join("")
+                            : '<p class="archive-report-empty">No active damage records match this report filter.</p>'
+                    }
+
+                    ${
+                        selectedDamages.length > 0
+                            ? `<button type="button"
+                                class="secondary-button archive-see-damage-log"
+                                data-toggle-damage-log="${production.id}">
+                                ${damageLogExpanded ? "Hide Damage Log" : "See Damage Log"}
+                               </button>`
+                            : ""
+                    }
+
+                    <div class="archive-damage-log" ${damageLogExpanded ? "" : "hidden"}>
+                        ${
+                            selectedDamages.map(function (damage) {
+                                return `
+                                    <article class="archive-report-transaction ${damage.undone_at ? "voided" : ""}">
+                                        <div class="archive-report-transaction-summary damage-summary-static">
+                                            <span><strong>
+                                                ${escapeHTML(damage.product_name)}
+                                                ${damage.variant_name ? ` — ${escapeHTML(damage.variant_name)}` : ""}
+                                            </strong></span>
+                                            <span>${Number(damage.quantity) || 0} damaged</span>
+                                            <span>${escapeHTML(new Date(damage.created_at).toLocaleString("en-GB"))}</span>
+                                            ${damage.undone_at ? '<span class="transaction-status-badge">UNDONE</span>' : ""}
+                                        </div>
+                                        <div class="archive-report-transaction-details">
+                                            <p>Recorded by: <strong>${escapeHTML(damage.recorded_by_username || "Unknown")}</strong></p>
+                                            <p>Reason: <strong>${escapeHTML(damage.reason || "No reason recorded")}</strong></p>
+                                            ${
+                                                damage.undone_at
+                                                    ? `<p class="transaction-void-notice">
+                                                        Restored by <strong>${escapeHTML(damage.undone_by_username || "Unknown")}</strong>
+                                                        on ${escapeHTML(new Date(damage.undone_at).toLocaleString("en-GB"))}
+                                                        ${damage.undo_reason ? ` · ${escapeHTML(damage.undo_reason)}` : ""}
+                                                       </p>`
+                                                    : `<button type="button"
+                                                        class="void-transaction-button"
+                                                        data-undo-damage="${damage.id}">
+                                                        Undo Damage
+                                                       </button>`
+                                            }
+                                        </div>
+                                    </article>
+                                `;
+                            }).join("")
+                        }
+                    </div>
+                </div>
+
+            </div>
+
         </div>
     `;
 
@@ -1754,6 +1909,78 @@ function bindProductionReportControls(
     );
 
 
+    const damagesToggle =
+        document.querySelector(
+            `[data-toggle-damages="${production.id}"]`
+        );
+
+    damagesToggle?.addEventListener(
+        "click",
+        function () {
+            if (expandedDamageLists.has(production.id)) {
+                expandedDamageLists.delete(production.id);
+                expandedDamageLogs.delete(production.id);
+            } else {
+                expandedDamageLists.add(production.id);
+            }
+            renderProductionReport(production);
+        }
+    );
+
+    const damageLogToggle =
+        document.querySelector(
+            `[data-toggle-damage-log="${production.id}"]`
+        );
+
+    damageLogToggle?.addEventListener(
+        "click",
+        function () {
+            if (expandedDamageLogs.has(production.id)) {
+                expandedDamageLogs.delete(production.id);
+            } else {
+                expandedDamageLogs.add(production.id);
+            }
+            renderProductionReport(production);
+        }
+    );
+
+    document.querySelectorAll(
+        `[data-production-report="${production.id}"] [data-undo-damage]`
+    ).forEach(function (button) {
+        button.addEventListener(
+            "click",
+            async function () {
+                const reason =
+                    window.prompt(
+                        "Undo this damage record and restore the stock?\\n\\nOptional reason for reversal:",
+                        ""
+                    );
+
+                if (reason === null) return;
+
+                try {
+                    await undoDamage(
+                        Number(button.dataset.undoDamage),
+                        reason.trim() || null
+                    );
+
+                    productionReportCache.delete(production.id);
+                    await loadProductionReport(production, { force: true });
+
+                    document.dispatchEvent(
+                        new CustomEvent("stock-damage-changed")
+                    );
+                } catch (error) {
+                    window.alert(
+                        "The damage record could not be undone.\\n\\n" +
+                        (error instanceof Error ? error.message : String(error))
+                    );
+                }
+            }
+        );
+    });
+
+
     const productsToggle =
         document.querySelector(
             `[data-toggle-products="${production.id}"]`
@@ -1879,7 +2106,8 @@ async function loadProductionReport(
     try {
         const [
             reportResponse,
-            stockResponse
+            stockResponse,
+            damageRows
         ] =
             await Promise.all([
                 archiveRequest(
@@ -1915,7 +2143,18 @@ async function loadProductionReport(
                                     production.id
                             })
                     }
-                )
+                ),
+                fetchDamages({
+                    departmentId: 1,
+                    productionId:
+                        production.id
+                }).catch(function (error) {
+                    console.warn(
+                        "Production damage history could not be loaded:",
+                        error
+                    );
+                    return [];
+                })
             ]);
 
         const result =
@@ -1953,6 +2192,12 @@ async function loadProductionReport(
                             ? stockResult.map(
                                 normaliseProductionStockRow
                             )
+                            : [],
+                    damages:
+                        Array.isArray(
+                            damageRows
+                        )
+                            ? damageRows
                             : []
                 }
             }
