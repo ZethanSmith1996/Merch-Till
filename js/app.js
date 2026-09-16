@@ -27,7 +27,7 @@ import {
 import {
     initialiseReports,
     renderReports
-} from "./reports.js?v=stage24-4-1";
+} from "./reports.js?v=stage24-4-2";
 import {
     initialiseUserManagement,
     renderUsersTable

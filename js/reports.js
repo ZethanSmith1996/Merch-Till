@@ -621,10 +621,52 @@ async function undoDamageFromReport(damage) {
     if (reason === null) return;
 
     try {
-        await damageReportRpc("undo_stock_damage", {
-            p_damage_id: Number(damage.id),
-            p_reason: reason.trim() || null
-        });
+        const undoResult =
+            await damageReportRpc(
+                "undo_stock_damage",
+                {
+                    p_damage_id:
+                        Number(damage.id),
+                    p_reason:
+                        reason.trim() || null
+                }
+            );
+
+        /*
+         * The RPC restores the stock in Supabase. Keep the Till's in-memory
+         * product cache in sync immediately as well. V24.4 previously only
+         * announced a product change, which re-rendered the stale local stock
+         * value and made a successful undo look as though stock had not been
+         * restored.
+         */
+        const product =
+            state.products.find(
+                item =>
+                    String(item.id) ===
+                    String(damage.product_id)
+            );
+
+        if (product) {
+            const returnedStock =
+                Array.isArray(undoResult)
+                    ? undoResult[0]?.new_stock
+                    : undoResult?.new_stock;
+
+            if (
+                returnedStock !== undefined &&
+                returnedStock !== null &&
+                Number.isFinite(
+                    Number(returnedStock)
+                )
+            ) {
+                product.stock =
+                    Number(returnedStock);
+            } else {
+                product.stock =
+                    Number(product.stock || 0) +
+                    Number(damage.quantity || 0);
+            }
+        }
 
         damageRequestSignature = "";
         await loadReportDamages();
