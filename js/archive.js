@@ -1294,6 +1294,58 @@ function renderProductionReport(
             ? reportData.stockSummary
             : [];
 
+    const damageRows =
+        (
+            Array.isArray(
+                reportData.damages
+            )
+                ? reportData.damages
+                : []
+        ).filter(
+            function (damage) {
+                const created =
+                    new Date(
+                        damage.created_at
+                    );
+
+                const year =
+                    created.getFullYear();
+
+                const month =
+                    String(
+                        created.getMonth() + 1
+                    ).padStart(2, "0");
+
+                const day =
+                    String(
+                        created.getDate()
+                    ).padStart(2, "0");
+
+                const damageDate =
+                    `${year}-${month}-${day}`;
+
+                const inDateRange =
+                    damageDate >=
+                        filter.from &&
+                    damageDate <=
+                        filter.to;
+
+                const inSession =
+                    filter.sessionId ===
+                        "all" ||
+                    String(
+                        damage.session_id
+                    ) === String(
+                        filter.sessionId
+                    );
+
+                return (
+                    inDateRange &&
+                    inSession
+                );
+            }
+        );
+
     const sessionOptions =
         reportData.sessions
             .map(
@@ -1522,6 +1574,12 @@ function renderProductionReport(
                 </div>
 
             </div>
+
+
+            ${archiveDamageSection(
+                production.id,
+                damageRows
+            )}
 
 
             <div class="archive-report-products">
@@ -1754,6 +1812,74 @@ function bindProductionReportControls(
     );
 
 
+    const damageToggle =
+        document.querySelector(
+            `[data-action="toggle-damaged-stock"][data-production-id="${production.id}"]`
+        );
+
+    damageToggle?.addEventListener(
+        "click",
+        function () {
+            const key =
+                String(
+                    production.id
+                );
+
+            if (
+                expandedDamageLists.has(
+                    key
+                )
+            ) {
+                expandedDamageLists.delete(
+                    key
+                );
+            } else {
+                expandedDamageLists.add(
+                    key
+                );
+            }
+
+            renderProductionReport(
+                production
+            );
+        }
+    );
+
+
+    const damageLogToggle =
+        document.querySelector(
+            `[data-action="toggle-damage-log"][data-production-id="${production.id}"]`
+        );
+
+    damageLogToggle?.addEventListener(
+        "click",
+        function () {
+            const key =
+                String(
+                    production.id
+                );
+
+            if (
+                expandedDamageLogLists.has(
+                    key
+                )
+            ) {
+                expandedDamageLogLists.delete(
+                    key
+                );
+            } else {
+                expandedDamageLogLists.add(
+                    key
+                );
+            }
+
+            renderProductionReport(
+                production
+            );
+        }
+    );
+
+
     const productsToggle =
         document.querySelector(
             `[data-toggle-products="${production.id}"]`
@@ -1879,7 +2005,8 @@ async function loadProductionReport(
     try {
         const [
             reportResponse,
-            stockResponse
+            stockResponse,
+            damageRows
         ] =
             await Promise.all([
                 archiveRequest(
@@ -1914,6 +2041,17 @@ async function loadProductionReport(
                                 p_production_id:
                                     production.id
                             })
+                    }
+                ),
+                archiveDamageRpc(
+                    "get_stock_damages",
+                    {
+                        p_department_id: 1,
+                        p_from: null,
+                        p_to: null,
+                        p_session_id: null,
+                        p_production_id:
+                            Number(production.id)
                     }
                 )
             ]);
@@ -1953,6 +2091,12 @@ async function loadProductionReport(
                             ? stockResult.map(
                                 normaliseProductionStockRow
                             )
+                            : [],
+                    damages:
+                        Array.isArray(
+                            damageRows
+                        )
+                            ? damageRows
                             : []
                 }
             }
