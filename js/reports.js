@@ -737,20 +737,79 @@ async function loadReportDamages() {
     const sequence = ++damageRequestSequence;
 
     try {
+        /*
+         * Fetch the department's complete damage history and apply the
+         * Reports period/session filter in the browser. This avoids date
+         * boundary/time-zone differences between PostgreSQL timestamptz
+         * and the Till's local reporting dates.
+         */
         const rows = await damageReportRpc("get_stock_damages", {
             p_department_id: departmentId,
-            p_from: start || null,
-            p_to: end || null,
-            p_session_id: sessionId ? Number(sessionId) : null,
+            p_from: null,
+            p_to: null,
+            p_session_id: null,
             p_production_id: null
         });
 
         if (sequence !== damageRequestSequence) return;
-        reportDamages = Array.isArray(rows) ? rows : [];
+
+        const allRows =
+            Array.isArray(rows)
+                ? rows
+                : [];
+
+        reportDamages =
+            allRows.filter(function (damage) {
+                const createdDate =
+                    localDate(
+                        new Date(
+                            damage.created_at
+                        )
+                    );
+
+                const inDateRange =
+                    createdDate >= start &&
+                    createdDate <= end;
+
+                const inSession =
+                    !sessionId ||
+                    String(
+                        damage.session_id
+                    ) === String(
+                        sessionId
+                    );
+
+                return (
+                    inDateRange &&
+                    inSession
+                );
+            });
+
+        if (dom.reportProductsDamaged) {
+            dom.reportProductsDamaged.dataset.loadError = "";
+        }
 
     } catch (error) {
         console.error("Damage report could not be loaded:", error);
         reportDamages = [];
+
+        const message =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+        if (dom.reportProductsDamaged) {
+            dom.reportProductsDamaged.innerHTML =
+                `<p class="form-error">Damage records could not be loaded: ${escapeHTML(message)}</p>`;
+            dom.reportProductsDamaged.dataset.loadError = "true";
+        }
+
+        if (dom.reportDamageLog) {
+            dom.reportDamageLog.innerHTML =
+                `<p class="form-error">Damage records could not be loaded: ${escapeHTML(message)}</p>`;
+        }
+
+        return;
     }
 
     renderDamageReports();
