@@ -1976,6 +1976,127 @@ function bindProductionReportControls(
 }
 
 
+async function archiveDamageRpc(name, body) {
+    const token = await getValidCloudAccessToken();
+    if (!token) throw new Error("No valid cloud session is available.");
+
+    const response = await fetch(`${supabaseConfig.url}/rest/v1/rpc/${name}`, {
+        method: "POST",
+        headers: {
+            "apikey": supabaseConfig.publishableKey,
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
+        body: JSON.stringify(body)
+    });
+
+    const text = await response.text();
+    let data = null;
+    if (text) {
+        try { data = JSON.parse(text); } catch (_) { data = text; }
+    }
+    if (!response.ok) {
+        throw new Error(data?.message || data?.error ||
+            (typeof data === "string" ? data : "") ||
+            `Damage history request failed (${response.status}).`);
+    }
+    return data;
+}
+
+
+function archiveDamageSection(productionId, damages) {
+    const key = String(productionId);
+    const expanded = expandedDamageLists.has(key);
+    const logExpanded = expandedDamageLogLists.has(key);
+
+    const totals = new Map();
+    damages.filter(d => !d.undone_at).forEach(function (d) {
+        const itemKey = `${d.product_id}:${d.variant_name || ""}`;
+        if (!totals.has(itemKey)) {
+            totals.set(itemKey, {
+                name: d.product_name,
+                variant: d.variant_name,
+                quantity: 0
+            });
+        }
+        totals.get(itemKey).quantity += Number(d.quantity) || 0;
+    });
+
+    const overview = Array.from(totals.values());
+    const total = overview.reduce((sum, row) => sum + row.quantity, 0);
+
+    const overviewHtml = overview.length
+        ? overview.map(row => `
+            <div class="archive-report-product-row">
+                <span>
+                    ${escapeHTML(row.name)}
+                    ${row.variant ? ` — ${escapeHTML(row.variant)}` : ""}
+                </span>
+                <strong>${row.quantity}</strong>
+            </div>
+        `).join("")
+        : '<p class="archive-report-empty">No active damaged stock is recorded for this Production.</p>';
+
+    const logHtml = damages.length
+        ? damages.map(function (d) {
+            const created = new Date(d.created_at);
+            return `
+                <article class="archive-damage-log-entry ${d.undone_at ? "is-undone" : ""}">
+                    <div class="archive-damage-log-heading">
+                        <strong>
+                            ${escapeHTML(d.product_name)}
+                            ${d.variant_name ? ` — ${escapeHTML(d.variant_name)}` : ""}
+                        </strong>
+                        <span>${Number(d.quantity) || 0} damaged</span>
+                        ${d.undone_at ? '<span class="transaction-status-badge">UNDONE</span>' : ""}
+                    </div>
+                    <p>
+                        ${created.toLocaleDateString("en-GB")} ·
+                        ${created.toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"})} ·
+                        ${escapeHTML(d.recorded_by_username || "Unknown")}
+                    </p>
+                    <p>Reason: <strong>${escapeHTML(d.reason || "No reason recorded")}</strong></p>
+                    ${d.undone_at ? `
+                        <p class="archive-damage-undone">
+                            Restored by <strong>${escapeHTML(d.undone_by_username || "Unknown")}</strong>
+                            on ${escapeHTML(new Date(d.undone_at).toLocaleString("en-GB"))}
+                            ${d.undo_reason ? ` · ${escapeHTML(d.undo_reason)}` : ""}
+                        </p>` : ""}
+                </article>
+            `;
+        }).join("")
+        : '<p class="archive-report-empty">No damage events were recorded for this Production.</p>';
+
+    return `
+        <div class="archive-report-damage">
+            <button type="button" class="archive-report-section-toggle"
+                data-action="toggle-damaged-stock" data-production-id="${productionId}"
+                aria-expanded="${expanded}">
+                <span>
+                    <strong>Damaged Stock</strong>
+                    <small>${total} item${total === 1 ? "" : "s"}</small>
+                </span>
+                <span>${expanded ? "Hide" : "Show"}</span>
+            </button>
+
+            <div class="archive-report-collapsible-content" ${expanded ? "" : "hidden"}>
+                ${overviewHtml}
+
+                <button type="button" class="secondary-button archive-see-damage-log"
+                    data-action="toggle-damage-log" data-production-id="${productionId}">
+                    ${logExpanded ? "Hide Damage Log" : "See Damage Log"}
+                </button>
+
+                <div class="archive-damage-log" ${logExpanded ? "" : "hidden"}>
+                    ${logHtml}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+
 async function loadProductionReport(
     production,
     {
