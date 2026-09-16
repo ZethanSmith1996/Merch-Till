@@ -4698,3 +4698,7 @@ select:focus {
         grid-template-columns: 1fr;
     }
 }
+
+
+/* V24 — Damaged stock */
+.damage-report-grid{margin-top:18px}.damage-summary-static{cursor:default}.damage-log-details{display:block}.damage-log-entry.voided-transaction{opacity:.72}.archive-report-damages-section{margin-top:14px}.archive-damage-overview{display:grid;gap:8px}.archive-see-damage-log{width:fit-content;margin-top:10px}.archive-damage-log{display:grid;gap:10px;margin-top:10px}#damage-reason{width:100%;resize:vertical}#record-damage-button{white-space:nowrap}
