@@ -1576,10 +1576,30 @@ function renderProductionReport(
             </div>
 
 
-            ${archiveDamageSection(
-                production.id,
-                damageRows
-            )}
+            ${
+                reportData.damageLoadError
+                    ? `
+                        <div class="archive-report-damage">
+                            <button
+                                type="button"
+                                class="archive-report-section-toggle"
+                                disabled
+                            >
+                                <span>
+                                    <strong>Damaged Stock</strong>
+                                    <small>Could not load damage history</small>
+                                </span>
+                            </button>
+                            <p class="archive-report-error">
+                                ${escapeHTML(reportData.damageLoadError)}
+                            </p>
+                        </div>
+                      `
+                    : archiveDamageSection(
+                        production.id,
+                        damageRows
+                    )
+            }
 
 
             <div class="archive-report-products">
@@ -2124,10 +2144,14 @@ async function loadProductionReport(
     );
 
     try {
+        /*
+         * Keep the established Production report and stock requests isolated
+         * from the newer damage-history request. Damage reporting must never
+         * be able to block the existing Archive report.
+         */
         const [
             reportResponse,
-            stockResponse,
-            damageRows
+            stockResponse
         ] =
             await Promise.all([
                 archiveRequest(
@@ -2163,8 +2187,21 @@ async function loadProductionReport(
                                     production.id
                             })
                     }
-                ),
-                archiveDamageRpc(
+                )
+            ]);
+
+        const result =
+            await reportResponse.json();
+
+        const stockResult =
+            await stockResponse.json();
+
+        let damageRows = [];
+        let damageLoadError = "";
+
+        try {
+            const loadedDamages =
+                await archiveDamageRpc(
                     "get_stock_damages",
                     {
                         p_department_id: 1,
@@ -2174,14 +2211,27 @@ async function loadProductionReport(
                         p_production_id:
                             Number(production.id)
                     }
-                )
-            ]);
+                );
 
-        const result =
-            await reportResponse.json();
+            damageRows =
+                Array.isArray(loadedDamages)
+                    ? loadedDamages
+                    : [];
+        } catch (damageError) {
+            /*
+             * Deliberately non-fatal: Products Sold, Transactions and stock
+             * history are the established Archive report and must still load.
+             */
+            console.error(
+                "Archive damage history could not be loaded:",
+                damageError
+            );
 
-        const stockResult =
-            await stockResponse.json();
+            damageLoadError =
+                damageError instanceof Error
+                    ? damageError.message
+                    : String(damageError);
+        }
 
         productionReportCache.set(
             production.id,
@@ -2218,7 +2268,9 @@ async function loadProductionReport(
                             damageRows
                         )
                             ? damageRows
-                            : []
+                            : [],
+                    damageLoadError:
+                        damageLoadError
                 }
             }
         );
