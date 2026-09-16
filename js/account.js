@@ -22,6 +22,8 @@ const roleLabels = {
     training: "Training"
 };
 
+let currentCloudAccountInfo = null;
+
 
 function currentUsername() {
     return (
@@ -41,13 +43,21 @@ function currentRole() {
 }
 
 
+function accountRole() {
+    return (
+        currentCloudAccountInfo?.role ||
+        currentRole()
+    );
+}
+
+
 function canHaveDiscountPin() {
     return [
         "master-admin",
         "admin",
         "manager"
     ].includes(
-        currentRole()
+        accountRole()
     );
 }
 
@@ -201,12 +211,139 @@ export async function refreshDiscountAuthorisers({
 
 
 
+
+async function loadMyAccountInfo() {
+    const username =
+        currentUsername();
+
+    if (
+        !username ||
+        !isCloudUsername(username) ||
+        !navigator.onLine
+    ) {
+        currentCloudAccountInfo =
+            null;
+
+        return null;
+    }
+
+    const rows =
+        await accountRequest(
+            "rest/v1/rpc/get_my_account_info",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    "Accept":
+                        "application/json"
+                },
+                body:
+                    "{}"
+            }
+        );
+
+    const info =
+        Array.isArray(rows)
+            ? rows[0]
+            : rows;
+
+    if (!info) {
+        currentCloudAccountInfo =
+            null;
+
+        return null;
+    }
+
+    currentCloudAccountInfo = {
+        username:
+            info.username ||
+            username,
+        role:
+            info.role ||
+            currentRole(),
+        hasDiscountPin:
+            Boolean(
+                info.has_discount_pin
+            )
+    };
+
+    /*
+     * Keep the local session's role aligned with the authoritative profile.
+     * This matters when Master promotes a user while that user's device is
+     * already signed in.
+     */
+    if (
+        currentCloudAccountInfo.role
+    ) {
+        sessionStorage.setItem(
+            "merchTillRole",
+            currentCloudAccountInfo.role
+        );
+    }
+
+    return currentCloudAccountInfo;
+}
+
+
+function updateDiscountPinWording() {
+    if (
+        !dom.myAccountDiscountCard
+    ) {
+        return;
+    }
+
+    const hasPin =
+        Boolean(
+            currentCloudAccountInfo
+                ?.hasDiscountPin
+        );
+
+    const heading =
+        dom.myAccountDiscountCard
+            .querySelector("h3");
+
+    const copy =
+        dom.myAccountDiscountCard
+            .querySelector(
+                ".my-account-card-heading p"
+            );
+
+    const submit =
+        dom.myAccountDiscountForm
+            ?.querySelector(
+                'button[type="submit"]'
+            );
+
+    if (heading) {
+        heading.textContent =
+            hasPin
+                ? "Discount Code"
+                : "Set Discount Code";
+    }
+
+    if (copy) {
+        copy.textContent =
+            hasPin
+                ? "Change the PIN you use to authorise discounts at the Till."
+                : "Create your first PIN for authorising discounts at the Till.";
+    }
+
+    if (submit) {
+        submit.textContent =
+            hasPin
+                ? "Change Discount PIN"
+                : "Set Discount PIN";
+    }
+}
+
+
 function renderAccountIdentity() {
     const username =
         currentUsername();
 
     const role =
-        currentRole();
+        accountRole();
 
     if (dom.myAccountUsername) {
         dom.myAccountUsername.textContent =
@@ -253,6 +390,8 @@ function renderAccountIdentity() {
             training ||
             !canHaveDiscountPin();
     }
+
+    updateDiscountPinWording();
 }
 
 
@@ -283,15 +422,28 @@ function resetAccountForms() {
 }
 
 
-function openMyAccount() {
+async function openMyAccount() {
     resetAccountForms();
-    renderAccountIdentity();
 
     if (
         dom.myAccountModal
     ) {
         dom.myAccountModal.hidden =
             false;
+    }
+
+    renderAccountIdentity();
+
+    try {
+        await loadMyAccountInfo();
+
+        renderAccountIdentity();
+
+    } catch (error) {
+        console.warn(
+            "My Account profile could not be refreshed:",
+            error
+        );
     }
 }
 
@@ -483,10 +635,20 @@ async function submitOwnDiscountPin(
             silent: true
         });
 
+        if (
+            currentCloudAccountInfo
+        ) {
+            currentCloudAccountInfo
+                .hasDiscountPin =
+                true;
+        }
+
+        updateDiscountPinWording();
+
         dom.myAccountDiscountForm.reset();
 
         setAccountStatus(
-            "Discount PIN changed successfully."
+            "Discount PIN saved successfully."
         );
 
     } catch (error) {
@@ -498,9 +660,9 @@ async function submitOwnDiscountPin(
     } finally {
         if (submit) {
             submit.disabled = false;
-            submit.textContent =
-                "Change Discount PIN";
         }
+
+        updateDiscountPinWording();
     }
 }
 
@@ -559,14 +721,20 @@ export function initialiseAccount() {
 
     document.addEventListener(
         "user-role-changed",
-        function () {
-            renderAccountIdentity();
-
+        async function () {
             if (
                 sessionStorage.getItem(
                     "merchTillLoggedIn"
                 ) === "true"
             ) {
+                try {
+                    await loadMyAccountInfo();
+                } catch (error) {
+                    // Session role remains the fallback if offline/unavailable.
+                }
+
+                renderAccountIdentity();
+
                 refreshDiscountAuthorisers({
                     silent: true
                 });

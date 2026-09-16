@@ -1,4 +1,4 @@
-import { dom } from "./dom.js";
+import { dom } from "./dom.js?v=stage23-4";
 import { supabaseConfig, currencyFormatter } from "./config.js";
 import { getValidCloudAccessToken } from "./auth.js?v=step1e";
 import { canManageArchive } from "./permissions.js";
@@ -1294,58 +1294,6 @@ function renderProductionReport(
             ? reportData.stockSummary
             : [];
 
-    const damageRows =
-        (
-            Array.isArray(
-                reportData.damages
-            )
-                ? reportData.damages
-                : []
-        ).filter(
-            function (damage) {
-                const created =
-                    new Date(
-                        damage.created_at
-                    );
-
-                const year =
-                    created.getFullYear();
-
-                const month =
-                    String(
-                        created.getMonth() + 1
-                    ).padStart(2, "0");
-
-                const day =
-                    String(
-                        created.getDate()
-                    ).padStart(2, "0");
-
-                const damageDate =
-                    `${year}-${month}-${day}`;
-
-                const inDateRange =
-                    damageDate >=
-                        filter.from &&
-                    damageDate <=
-                        filter.to;
-
-                const inSession =
-                    filter.sessionId ===
-                        "all" ||
-                    String(
-                        damage.session_id
-                    ) === String(
-                        filter.sessionId
-                    );
-
-                return (
-                    inDateRange &&
-                    inSession
-                );
-            }
-        );
-
     const sessionOptions =
         reportData.sessions
             .map(
@@ -1574,32 +1522,6 @@ function renderProductionReport(
                 </div>
 
             </div>
-
-
-            ${
-                reportData.damageLoadError
-                    ? `
-                        <div class="archive-report-damage">
-                            <button
-                                type="button"
-                                class="archive-report-section-toggle"
-                                disabled
-                            >
-                                <span>
-                                    <strong>Damaged Stock</strong>
-                                    <small>Could not load damage history</small>
-                                </span>
-                            </button>
-                            <p class="archive-report-error">
-                                ${escapeHTML(reportData.damageLoadError)}
-                            </p>
-                        </div>
-                      `
-                    : archiveDamageSection(
-                        production.id,
-                        damageRows
-                    )
-            }
 
 
             <div class="archive-report-products">
@@ -1832,74 +1754,6 @@ function bindProductionReportControls(
     );
 
 
-    const damageToggle =
-        document.querySelector(
-            `[data-action="toggle-damaged-stock"][data-production-id="${production.id}"]`
-        );
-
-    damageToggle?.addEventListener(
-        "click",
-        function () {
-            const key =
-                String(
-                    production.id
-                );
-
-            if (
-                expandedDamageLists.has(
-                    key
-                )
-            ) {
-                expandedDamageLists.delete(
-                    key
-                );
-            } else {
-                expandedDamageLists.add(
-                    key
-                );
-            }
-
-            renderProductionReport(
-                production
-            );
-        }
-    );
-
-
-    const damageLogToggle =
-        document.querySelector(
-            `[data-action="toggle-damage-log"][data-production-id="${production.id}"]`
-        );
-
-    damageLogToggle?.addEventListener(
-        "click",
-        function () {
-            const key =
-                String(
-                    production.id
-                );
-
-            if (
-                expandedDamageLogLists.has(
-                    key
-                )
-            ) {
-                expandedDamageLogLists.delete(
-                    key
-                );
-            } else {
-                expandedDamageLogLists.add(
-                    key
-                );
-            }
-
-            renderProductionReport(
-                production
-            );
-        }
-    );
-
-
     const productsToggle =
         document.querySelector(
             `[data-toggle-products="${production.id}"]`
@@ -1996,127 +1850,6 @@ function bindProductionReportControls(
 }
 
 
-async function archiveDamageRpc(name, body) {
-    const token = await getValidCloudAccessToken();
-    if (!token) throw new Error("No valid cloud session is available.");
-
-    const response = await fetch(`${supabaseConfig.url}/rest/v1/rpc/${name}`, {
-        method: "POST",
-        headers: {
-            "apikey": supabaseConfig.publishableKey,
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        },
-        body: JSON.stringify(body)
-    });
-
-    const text = await response.text();
-    let data = null;
-    if (text) {
-        try { data = JSON.parse(text); } catch (_) { data = text; }
-    }
-    if (!response.ok) {
-        throw new Error(data?.message || data?.error ||
-            (typeof data === "string" ? data : "") ||
-            `Damage history request failed (${response.status}).`);
-    }
-    return data;
-}
-
-
-function archiveDamageSection(productionId, damages) {
-    const key = String(productionId);
-    const expanded = expandedDamageLists.has(key);
-    const logExpanded = expandedDamageLogLists.has(key);
-
-    const totals = new Map();
-    damages.filter(d => !d.undone_at).forEach(function (d) {
-        const itemKey = `${d.product_id}:${d.variant_name || ""}`;
-        if (!totals.has(itemKey)) {
-            totals.set(itemKey, {
-                name: d.product_name,
-                variant: d.variant_name,
-                quantity: 0
-            });
-        }
-        totals.get(itemKey).quantity += Number(d.quantity) || 0;
-    });
-
-    const overview = Array.from(totals.values());
-    const total = overview.reduce((sum, row) => sum + row.quantity, 0);
-
-    const overviewHtml = overview.length
-        ? overview.map(row => `
-            <div class="archive-report-product-row">
-                <span>
-                    ${escapeHTML(row.name)}
-                    ${row.variant ? ` — ${escapeHTML(row.variant)}` : ""}
-                </span>
-                <strong>${row.quantity}</strong>
-            </div>
-        `).join("")
-        : '<p class="archive-report-empty">No active damaged stock is recorded for this Production.</p>';
-
-    const logHtml = damages.length
-        ? damages.map(function (d) {
-            const created = new Date(d.created_at);
-            return `
-                <article class="archive-damage-log-entry ${d.undone_at ? "is-undone" : ""}">
-                    <div class="archive-damage-log-heading">
-                        <strong>
-                            ${escapeHTML(d.product_name)}
-                            ${d.variant_name ? ` — ${escapeHTML(d.variant_name)}` : ""}
-                        </strong>
-                        <span>${Number(d.quantity) || 0} damaged</span>
-                        ${d.undone_at ? '<span class="transaction-status-badge">UNDONE</span>' : ""}
-                    </div>
-                    <p>
-                        ${created.toLocaleDateString("en-GB")} ·
-                        ${created.toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"})} ·
-                        ${escapeHTML(d.recorded_by_username || "Unknown")}
-                    </p>
-                    <p>Reason: <strong>${escapeHTML(d.reason || "No reason recorded")}</strong></p>
-                    ${d.undone_at ? `
-                        <p class="archive-damage-undone">
-                            Restored by <strong>${escapeHTML(d.undone_by_username || "Unknown")}</strong>
-                            on ${escapeHTML(new Date(d.undone_at).toLocaleString("en-GB"))}
-                            ${d.undo_reason ? ` · ${escapeHTML(d.undo_reason)}` : ""}
-                        </p>` : ""}
-                </article>
-            `;
-        }).join("")
-        : '<p class="archive-report-empty">No damage events were recorded for this Production.</p>';
-
-    return `
-        <div class="archive-report-damage">
-            <button type="button" class="archive-report-section-toggle"
-                data-action="toggle-damaged-stock" data-production-id="${productionId}"
-                aria-expanded="${expanded}">
-                <span>
-                    <strong>Damaged Stock</strong>
-                    <small>${total} item${total === 1 ? "" : "s"}</small>
-                </span>
-                <span>${expanded ? "Hide" : "Show"}</span>
-            </button>
-
-            <div class="archive-report-collapsible-content" ${expanded ? "" : "hidden"}>
-                ${overviewHtml}
-
-                <button type="button" class="secondary-button archive-see-damage-log"
-                    data-action="toggle-damage-log" data-production-id="${productionId}">
-                    ${logExpanded ? "Hide Damage Log" : "See Damage Log"}
-                </button>
-
-                <div class="archive-damage-log" ${logExpanded ? "" : "hidden"}>
-                    ${logHtml}
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-
 async function loadProductionReport(
     production,
     {
@@ -2144,11 +1877,6 @@ async function loadProductionReport(
     );
 
     try {
-        /*
-         * Keep the established Production report and stock requests isolated
-         * from the newer damage-history request. Damage reporting must never
-         * be able to block the existing Archive report.
-         */
         const [
             reportResponse,
             stockResponse
@@ -2196,43 +1924,6 @@ async function loadProductionReport(
         const stockResult =
             await stockResponse.json();
 
-        let damageRows = [];
-        let damageLoadError = "";
-
-        try {
-            const loadedDamages =
-                await archiveDamageRpc(
-                    "get_stock_damages",
-                    {
-                        p_department_id: 1,
-                        p_from: null,
-                        p_to: null,
-                        p_session_id: null,
-                        p_production_id:
-                            Number(production.id)
-                    }
-                );
-
-            damageRows =
-                Array.isArray(loadedDamages)
-                    ? loadedDamages
-                    : [];
-        } catch (damageError) {
-            /*
-             * Deliberately non-fatal: Products Sold, Transactions and stock
-             * history are the established Archive report and must still load.
-             */
-            console.error(
-                "Archive damage history could not be loaded:",
-                damageError
-            );
-
-            damageLoadError =
-                damageError instanceof Error
-                    ? damageError.message
-                    : String(damageError);
-        }
-
         productionReportCache.set(
             production.id,
             {
@@ -2262,15 +1953,7 @@ async function loadProductionReport(
                             ? stockResult.map(
                                 normaliseProductionStockRow
                             )
-                            : [],
-                    damages:
-                        Array.isArray(
-                            damageRows
-                        )
-                            ? damageRows
-                            : [],
-                    damageLoadError:
-                        damageLoadError
+                            : []
                 }
             }
         );
