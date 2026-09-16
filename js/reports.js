@@ -724,24 +724,6 @@ export function initialiseReports() {
         renderReports();
     });
 
-    dom.toggleDamageLogButton
-        ?.addEventListener(
-            "click",
-            function () {
-                damageLogVisible =
-                    !damageLogVisible;
-                renderDamageLog();
-            }
-        );
-
-    document.addEventListener(
-        "stock-damage-changed",
-        function () {
-            damageLoadSignature = "";
-            loadReportDamages();
-        }
-    );
-
     document.addEventListener("sales-changed", renderReports);
     document.addEventListener("sessions-changed", renderReports);
 }
