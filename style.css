@@ -4712,3 +4712,11 @@ select:focus {
     width: 100%;
     resize: vertical;
 }
+
+
+/* V24.4 — Damage reporting + undo */
+.damage-report-grid { margin-top: 18px; }
+.damage-summary-static { cursor: default; }
+.damage-log-details { display: grid; gap: 10px; }
+.damage-log-entry.voided-transaction { opacity: 0.72; }
+.damage-log-entry .void-transaction-button { width: fit-content; }

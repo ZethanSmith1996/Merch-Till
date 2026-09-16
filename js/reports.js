@@ -5,6 +5,9 @@ import { announceProductsChanged, escapeHTML } from "./utils.js";
 import { saveVoidedSaleTransaction } from "./database.js";
 import { canViewReports } from "./permissions.js";
 import { logAuditEvent, auditActorUsername } from "./audit-log.js?v=priority10c";
+import { supabaseConfig } from "./config.js?v=step3b";
+import { getValidCloudAccessToken } from "./auth.js?v=step3b";
+import { getCurrentDepartment } from "./department-context.js?v=stage15f2";
 
 let reportMode = "all";
 let activeSessionId = "all";
@@ -12,6 +15,10 @@ let rangeStart = null;
 let rangeEnd = null;
 let transactionsVisible = false;
 let expandedTransactionId = null;
+let damageLogVisible = false;
+let reportDamages = [];
+let damageRequestSignature = "";
+let damageRequestSequence = 0;
 
 function localDate(date = new Date()) {
     const year = date.getFullYear();
@@ -514,6 +521,242 @@ function renderTransactions(sales) {
     });
 }
 
+
+async function damageReportRpc(name, body) {
+    if (!navigator.onLine) {
+        throw new Error("Damage reporting requires an internet connection.");
+    }
+
+    const token = await getValidCloudAccessToken();
+
+    if (!token) {
+        throw new Error("No valid cloud session is available.");
+    }
+
+    const response = await fetch(
+        `${supabaseConfig.url}/rest/v1/rpc/${name}`,
+        {
+            method: "POST",
+            headers: {
+                "apikey": supabaseConfig.publishableKey,
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify(body)
+        }
+    );
+
+    const text = await response.text();
+    let data = null;
+
+    if (text) {
+        try { data = JSON.parse(text); }
+        catch (_) { data = text; }
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            data?.message || data?.error ||
+            (typeof data === "string" ? data : "") ||
+            `Damage request failed (${response.status}).`
+        );
+    }
+
+    return data;
+}
+
+function renderProductsDamaged() {
+    if (!dom.reportProductsDamaged) return;
+
+    const totals = new Map();
+
+    reportDamages
+        .filter(damage => !damage.undone_at)
+        .forEach(function (damage) {
+            const key = `${damage.product_id}:${damage.variant_name || ""}`;
+
+            if (!totals.has(key)) {
+                totals.set(key, {
+                    name: damage.product_name,
+                    variant: damage.variant_name,
+                    quantity: 0
+                });
+            }
+
+            totals.get(key).quantity += Number(damage.quantity) || 0;
+        });
+
+    const rows = Array.from(totals.values()).sort(function (a, b) {
+        return b.quantity - a.quantity || a.name.localeCompare(b.name);
+    });
+
+    if (!rows.length) {
+        dom.reportProductsDamaged.innerHTML =
+            '<p class="report-empty">No damaged products were recorded in this period.</p>';
+        return;
+    }
+
+    dom.reportProductsDamaged.innerHTML = rows.map(function (row, index) {
+        return `
+            <div class="report-product-row">
+                <span class="report-product-rank">${index + 1}</span>
+                <span class="report-product-name">
+                    ${escapeHTML(row.name)}
+                    ${row.variant ? `<small class="report-variant-breakdown">${escapeHTML(row.variant)}</small>` : ""}
+                </span>
+                <strong>${row.quantity} damaged</strong>
+                <span></span>
+            </div>
+        `;
+    }).join("");
+}
+
+async function undoDamageFromReport(damage) {
+    const reason = window.prompt(
+        `Undo this damage record and restore ${damage.quantity} × ${damage.product_name} to stock?\n\nOptional reason for reversal:`,
+        ""
+    );
+
+    if (reason === null) return;
+
+    try {
+        await damageReportRpc("undo_stock_damage", {
+            p_damage_id: Number(damage.id),
+            p_reason: reason.trim() || null
+        });
+
+        damageRequestSignature = "";
+        await loadReportDamages();
+        announceProductsChanged();
+
+    } catch (error) {
+        window.alert(
+            "The damage record could not be undone.\n\n" +
+            (error instanceof Error ? error.message : String(error))
+        );
+    }
+}
+
+function renderDamageLog() {
+    if (!dom.reportDamageLog) return;
+
+    dom.reportDamageLog.hidden = !damageLogVisible;
+    dom.toggleDamageLogButton.textContent =
+        damageLogVisible ? "Hide Damage Log" : "Show Damage Log";
+
+    if (!damageLogVisible) return;
+
+    if (!reportDamages.length) {
+        dom.reportDamageLog.innerHTML =
+            '<p class="report-empty">No damage records were recorded in this period.</p>';
+        return;
+    }
+
+    dom.reportDamageLog.innerHTML = "";
+
+    reportDamages.forEach(function (damage) {
+        const article = document.createElement("article");
+        article.className = "report-transaction damage-log-entry";
+
+        if (damage.undone_at) {
+            article.classList.add("voided-transaction");
+        }
+
+        const created = new Date(damage.created_at);
+
+        article.innerHTML = `
+            <div class="transaction-summary damage-summary-static">
+                <span class="transaction-order">
+                    ${escapeHTML(damage.product_name)}
+                    ${damage.variant_name ? ` — ${escapeHTML(damage.variant_name)}` : ""}
+                </span>
+                <span>
+                    ${created.toLocaleDateString("en-GB")} ·
+                    ${created.toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"})}
+                </span>
+                <span>${Number(damage.quantity) || 0} damaged</span>
+                <strong>${escapeHTML(damage.recorded_by_username || "Unknown")}</strong>
+                ${damage.undone_at ? '<span class="transaction-status-badge">UNDONE</span>' : ""}
+            </div>
+            <div class="transaction-details damage-log-details">
+                <p>Reason: <strong>${escapeHTML(damage.reason || "No reason recorded")}</strong></p>
+                ${damage.undone_at ? `
+                    <p class="transaction-void-notice">
+                        Restored by <strong>${escapeHTML(damage.undone_by_username || "Unknown")}</strong>
+                        on ${escapeHTML(new Date(damage.undone_at).toLocaleString("en-GB"))}
+                        ${damage.undo_reason ? ` · ${escapeHTML(damage.undo_reason)}` : ""}
+                    </p>
+                ` : ""}
+            </div>
+        `;
+
+        if (!damage.undone_at) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "void-transaction-button";
+            button.textContent = "Undo Damage";
+            button.addEventListener("click", function () {
+                undoDamageFromReport(damage);
+            });
+            article.querySelector(".damage-log-details")?.appendChild(button);
+        }
+
+        dom.reportDamageLog.appendChild(article);
+    });
+}
+
+function renderDamageReports() {
+    renderProductsDamaged();
+    renderDamageLog();
+}
+
+async function loadReportDamages() {
+    if (!canViewReports()) {
+        reportDamages = [];
+        renderDamageReports();
+        return;
+    }
+
+    const departmentId = Number(getCurrentDepartment()?.id || 1);
+    const start = rangeStart || localDate();
+    const end = rangeEnd || start;
+    const sessionId =
+        reportMode === "all" || activeSessionId === "all"
+            ? null
+            : activeSessionId;
+
+    const signature = [departmentId, start, end, sessionId || "all"].join("|");
+
+    if (signature === damageRequestSignature) {
+        renderDamageReports();
+        return;
+    }
+
+    damageRequestSignature = signature;
+    const sequence = ++damageRequestSequence;
+
+    try {
+        const rows = await damageReportRpc("get_stock_damages", {
+            p_department_id: departmentId,
+            p_from: start || null,
+            p_to: end || null,
+            p_session_id: sessionId ? Number(sessionId) : null,
+            p_production_id: null
+        });
+
+        if (sequence !== damageRequestSequence) return;
+        reportDamages = Array.isArray(rows) ? rows : [];
+
+    } catch (error) {
+        console.error("Damage report could not be loaded:", error);
+        reportDamages = [];
+    }
+
+    renderDamageReports();
+}
+
+
 export function renderReports() {
     updateModeButtons();
     updateActivePeriodHeading();
@@ -656,6 +899,7 @@ export function renderReports() {
 
     renderProductsSold(activeSales);
     renderTransactions(sales);
+    loadReportDamages();
 }
 
 export function initialiseReports() {
@@ -722,6 +966,11 @@ export function initialiseReports() {
         transactionsVisible = !transactionsVisible;
         expandedTransactionId = null;
         renderReports();
+    });
+
+    dom.toggleDamageLogButton?.addEventListener("click", function () {
+        damageLogVisible = !damageLogVisible;
+        renderDamageLog();
     });
 
     document.addEventListener("sales-changed", renderReports);

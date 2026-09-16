@@ -51,7 +51,7 @@
         href="icons/icon-192.png"
     >
 
-    <link rel="stylesheet" href="style.css?v=stage24-3">
+    <link rel="stylesheet" href="style.css?v=stage24-4">
 </head>
 
 <body>
@@ -793,6 +793,25 @@
 
                         </section>
 
+                    </div>
+
+                    <div class="report-content-grid damage-report-grid">
+                        <section class="report-block">
+                            <h3>Products Damaged</h3>
+                            <div id="report-products-damaged">
+                                <p class="report-empty">No damaged products were recorded in this period.</p>
+                            </div>
+                        </section>
+
+                        <section class="report-block">
+                            <div class="report-block-heading">
+                                <h3>Damage Log</h3>
+                                <button type="button" id="toggle-damage-log-button" class="show-transactions-button">
+                                    Show Damage Log
+                                </button>
+                            </div>
+                            <div id="report-damage-log" class="report-transactions" hidden></div>
+                        </section>
                     </div>
 
                 </section>
@@ -3291,7 +3310,7 @@
         </div>
     </div>
 
-<script type="module" src="js/app.js?v=stage24-3"></script>
+<script type="module" src="js/app.js?v=stage24-4"></script>
 
 </body>
 </html>

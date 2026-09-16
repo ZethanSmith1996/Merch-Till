@@ -262,5 +262,8 @@ export const dom = {
     reportTransactionsCount: document.getElementById("report-transactions-count"),
     reportProductsSold: document.getElementById("report-products-sold"),
     toggleTransactionsButton: document.getElementById("toggle-transactions-button"),
+    reportProductsDamaged: document.getElementById("report-products-damaged"),
+    reportDamageLog: document.getElementById("report-damage-log"),
+    toggleDamageLogButton: document.getElementById("toggle-damage-log-button"),
     reportTransactions: document.getElementById("report-transactions")
 };
