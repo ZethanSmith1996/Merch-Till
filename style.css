@@ -4698,3 +4698,17 @@ select:focus {
         grid-template-columns: 1fr;
     }
 }
+
+
+/* ==================================================
+   V24.3 — Record Damage button
+================================================== */
+
+#record-damage-button {
+    white-space: nowrap;
+}
+
+#damage-reason {
+    width: 100%;
+    resize: vertical;
+}

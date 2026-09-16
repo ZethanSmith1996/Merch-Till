@@ -12,7 +12,7 @@ import {
 import {
     initialiseProductManagement,
     renderProductsTable
-} from "./products.js?v=stage20";
+} from "./products.js?v=stage24-3";
 import {
     initialiseTill,
     renderCart,

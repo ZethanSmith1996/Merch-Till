@@ -2022,8 +2022,296 @@ async function saveDelivery() {
 }
 
 
+
+function damageProductLabel(product) {
+    return product.variantName
+        ? `${product.name} — ${product.variantName}`
+        : product.name;
+}
+
+
+function closeDamageModal() {
+    if (!dom.damageModal) {
+        return;
+    }
+
+    dom.damageModal.hidden = true;
+    dom.damageError.textContent = "";
+}
+
+
+function updateDamageStockHelp() {
+    const option =
+        dom.damageProductInput
+            ?.selectedOptions?.[0];
+
+    const stock =
+        Number(option?.dataset?.stock || 0);
+
+    if (dom.damageStockHelp) {
+        dom.damageStockHelp.textContent =
+            `${stock} currently available to sell.`;
+    }
+
+    if (dom.damageQuantityInput) {
+        dom.damageQuantityInput.max =
+            String(Math.max(stock, 1));
+    }
+}
+
+
+async function openDamageModal() {
+    if (!requireOnlineProductManagement()) {
+        return;
+    }
+
+    try {
+        const authoritative =
+            await fetchAuthoritativeCloudProducts();
+
+        state.products = authoritative;
+
+        const departmentId =
+            currentProductDepartmentId();
+
+        const productionId =
+            currentProductProductionId();
+
+        const rows =
+            authoritative.filter(
+                function (product) {
+                    const sameDepartment =
+                        Number(
+                            product.departmentId || 1
+                        ) === Number(departmentId);
+
+                    const sameProduction =
+                        productionId === null
+                            ? product.productionId === null
+                            : Number(
+                                product.productionId
+                              ) === Number(
+                                productionId
+                              );
+
+                    return (
+                        sameDepartment &&
+                        sameProduction &&
+                        Number(product.stock || 0) > 0
+                    );
+                }
+            );
+
+        if (rows.length === 0) {
+            window.alert(
+                "There is no available stock in this product catalogue to record as damaged."
+            );
+            return;
+        }
+
+        dom.damageProductInput.innerHTML =
+            rows.map(function (product) {
+                return `
+                    <option
+                        value="${product.id}"
+                        data-stock="${Number(product.stock) || 0}"
+                    >
+                        ${escapeHTML(
+                            damageProductLabel(product)
+                        )}
+                    </option>
+                `;
+            }).join("");
+
+        dom.damageQuantityInput.value = "1";
+        dom.damageReasonInput.value = "";
+        dom.damageError.textContent = "";
+
+        updateDamageStockHelp();
+
+        dom.damageModal.hidden = false;
+
+    } catch (error) {
+        window.alert(
+            "The damage form could not be opened.\n\n" +
+            (
+                error instanceof Error
+                    ? error.message
+                    : String(error)
+            )
+        );
+    }
+}
+
+
+async function saveDamage() {
+    const productId =
+        Number(dom.damageProductInput.value);
+
+    const quantity =
+        Number(dom.damageQuantityInput.value);
+
+    const stock =
+        Number(
+            dom.damageProductInput
+                ?.selectedOptions?.[0]
+                ?.dataset?.stock || 0
+        );
+
+    if (
+        !Number.isInteger(quantity) ||
+        quantity <= 0
+    ) {
+        dom.damageError.textContent =
+            "Damaged quantity must be a whole number greater than zero.";
+        return;
+    }
+
+    if (quantity > stock) {
+        dom.damageError.textContent =
+            `Only ${stock} item${stock === 1 ? "" : "s"} are currently available.`;
+        return;
+    }
+
+    dom.saveDamageButton.disabled = true;
+    dom.saveDamageButton.textContent =
+        "Recording…";
+    dom.damageError.textContent = "";
+
+    try {
+        const accessToken =
+            await getValidCloudAccessToken();
+
+        if (!accessToken) {
+            throw new Error(
+                "No valid cloud session is available. Log out and log back in while online."
+            );
+        }
+
+        const response =
+            await fetch(
+                `${supabaseConfig.url}/rest/v1/rpc/record_stock_damage`,
+                {
+                    method: "POST",
+                    headers: {
+                        "apikey":
+                            supabaseConfig.publishableKey,
+                        "Authorization":
+                            `Bearer ${accessToken}`,
+                        "Content-Type":
+                            "application/json",
+                        "Accept":
+                            "application/json"
+                    },
+                    body:
+                        JSON.stringify({
+                            p_product_id:
+                                productId,
+                            p_quantity:
+                                quantity,
+                            p_reason:
+                                String(
+                                    dom.damageReasonInput.value || ""
+                                ).trim() || null
+                        })
+                }
+            );
+
+        const text =
+            await response.text();
+
+        let result = null;
+
+        if (text) {
+            try {
+                result = JSON.parse(text);
+            } catch (error) {
+                result = text;
+            }
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                result?.message ||
+                result?.error ||
+                (
+                    typeof result === "string"
+                        ? result
+                        : ""
+                ) ||
+                `Damage request failed (${response.status}).`
+            );
+        }
+
+        closeDamageModal();
+
+        await refreshProductCacheFromCloud();
+
+        setProductCloudStatus(
+            `${quantity} damaged item${quantity === 1 ? "" : "s"} recorded successfully.`
+        );
+
+    } catch (error) {
+        dom.damageError.textContent =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+    } finally {
+        dom.saveDamageButton.disabled =
+            false;
+
+        dom.saveDamageButton.textContent =
+            "Record Damage";
+    }
+}
+
+
 export function initialiseProductManagement() {
     dom.addProductButton.addEventListener("click", openAddProductModal);
+
+    dom.recordDamageButton
+        ?.addEventListener(
+            "click",
+            openDamageModal
+        );
+
+    dom.damageProductInput
+        ?.addEventListener(
+            "change",
+            updateDamageStockHelp
+        );
+
+    dom.closeDamageModalButton
+        ?.addEventListener(
+            "click",
+            closeDamageModal
+        );
+
+    dom.cancelDamageButton
+        ?.addEventListener(
+            "click",
+            closeDamageModal
+        );
+
+    dom.saveDamageButton
+        ?.addEventListener(
+            "click",
+            saveDamage
+        );
+
+    dom.damageModal
+        ?.addEventListener(
+            "click",
+            function (event) {
+                if (
+                    event.target ===
+                    dom.damageModal
+                ) {
+                    closeDamageModal();
+                }
+            }
+        );
 
     dom.addDeliveryButton
         ?.addEventListener(
